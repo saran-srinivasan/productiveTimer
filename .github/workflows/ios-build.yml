@@ -13,6 +13,8 @@ jobs:
     runs-on: macos-latest
     env:
       RCT_USE_PREBUILT_RNCORE: "0"
+      EXPO_PUBLIC_SUPABASE_URL: ${{ secrets.EXPO_PUBLIC_SUPABASE_URL }}
+      EXPO_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.EXPO_PUBLIC_SUPABASE_ANON_KEY }}
 
     steps:
       - name: Checkout Repository
