@@ -63,7 +63,17 @@ jobs:
             CODE_SIGN_IDENTITY="" \
             CODE_SIGN_STYLE=Manual \
             PROVISIONING_PROFILE_SPECIFIER="" \
-            clean build
+            clean build > xcodebuild.log 2>&1 || {
+              echo "=============================================="
+              echo "   xcodebuild failed! Extracting errors...    "
+              echo "=============================================="
+              grep -i -C 3 "error:" xcodebuild.log || true
+              echo "=============================================="
+              echo "   Showing the last 100 lines of build log    "
+              echo "=============================================="
+              tail -n 100 xcodebuild.log
+              exit 65
+            }
 
       - name: Package IPA
         working-directory: mobile
