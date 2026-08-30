@@ -1,20 +1,33 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, Dispatch, SetStateAction, FormEvent } from "react";
 import { workoutPresets } from "../constants";
 import { isSupabaseConfigured, supabase } from "../supabaseClient";
 import { todayKey } from "../utils/date";
+import { safeId } from "../utils/ledger";
+import { playTacticalSound } from "../utils/sound";
+import { LedgerData, SyncState, WorkoutKind } from "../types/ledger";
 
-export const useWorkoutForm = ({ setData, setSyncState }) => {
-  const [workoutKind, setWorkoutKind] = useState("strength");
-  const [workoutDate, setWorkoutDate] = useState(todayKey());
-  const [workoutExercise, setWorkoutExercise] = useState(
+interface UseWorkoutFormParams {
+  setData: Dispatch<SetStateAction<LedgerData>>;
+  setSyncState: Dispatch<SetStateAction<SyncState>>;
+  soundEnabled?: boolean;
+}
+
+export const useWorkoutForm = ({
+  setData,
+  setSyncState,
+  soundEnabled = true,
+}: UseWorkoutFormParams) => {
+  const [workoutKind, setWorkoutKind] = useState<WorkoutKind>("strength");
+  const [workoutDate, setWorkoutDate] = useState<string>(todayKey());
+  const [workoutExercise, setWorkoutExercise] = useState<string>(
     workoutPresets.strength[0],
   );
   const [customWorkoutExercise, setCustomWorkoutExercise] = useState("");
-  const [workoutSets, setWorkoutSets] = useState(3);
-  const [workoutReps, setWorkoutReps] = useState(10);
-  const [workoutWeight, setWorkoutWeight] = useState(40);
-  const [cardioMinutes, setCardioMinutes] = useState(20);
-  const [cardioDistance, setCardioDistance] = useState(2);
+  const [workoutSets, setWorkoutSets] = useState<number | string>(3);
+  const [workoutReps, setWorkoutReps] = useState<number | string>(10);
+  const [workoutWeight, setWorkoutWeight] = useState<number | string>(40);
+  const [cardioMinutes, setCardioMinutes] = useState<number | string>(20);
+  const [cardioDistance, setCardioDistance] = useState<number | string>(2);
   const [workoutIntensity, setWorkoutIntensity] = useState("moderate");
   const [workoutNote, setWorkoutNote] = useState("");
 
@@ -23,7 +36,7 @@ export const useWorkoutForm = ({ setData, setSyncState }) => {
     setCustomWorkoutExercise("");
   }, [workoutKind]);
 
-  const addWorkout = (event) => {
+  const addWorkout = (event: FormEvent) => {
     event.preventDefault();
     const exercise =
       workoutExercise === "Custom"
@@ -41,11 +54,13 @@ export const useWorkoutForm = ({ setData, setSyncState }) => {
     if (isStrength && (!sets || sets < 1 || !reps || reps < 1)) return;
     if (!isStrength && (!durationMinutes || durationMinutes < 1)) return;
 
+    playTacticalSound("complete", soundEnabled);
+
     setData((current) => ({
       ...current,
       workouts: [
         {
-          id: crypto.randomUUID(),
+          id: safeId(),
           date: workoutDate,
           kind: workoutKind,
           exercise,
@@ -71,14 +86,17 @@ export const useWorkoutForm = ({ setData, setSyncState }) => {
     }
   };
 
-  const deleteWorkout = (workoutId) => {
+  const deleteWorkout = (workoutId: string) => {
+    playTacticalSound("click", soundEnabled);
+
     setData((current) => ({
       ...current,
       workouts: current.workouts.filter((workout) => workout.id !== workoutId),
     }));
 
-    if (isSupabaseConfigured) {
-      supabase
+    const client = supabase;
+    if (isSupabaseConfigured && client) {
+      client
         .from("workout_entries")
         .delete()
         .eq("id", workoutId)
@@ -86,6 +104,20 @@ export const useWorkoutForm = ({ setData, setSyncState }) => {
           if (error) setSyncState("Cloud error");
         });
     }
+  };
+
+  // Quick steppers
+  const adjustWeight = (delta: number) => {
+    setWorkoutWeight((w) => Math.max(0, (Number(w) || 0) + delta));
+  };
+  const adjustSets = (delta: number) => {
+    setWorkoutSets((s) => Math.max(1, (Number(s) || 1) + delta));
+  };
+  const adjustReps = (delta: number) => {
+    setWorkoutReps((r) => Math.max(1, (Number(r) || 1) + delta));
+  };
+  const adjustCardioMinutes = (delta: number) => {
+    setCardioMinutes((m) => Math.max(1, (Number(m) || 1) + delta));
   };
 
   return {
@@ -112,6 +144,10 @@ export const useWorkoutForm = ({ setData, setSyncState }) => {
       setCardioDistance,
       setWorkoutIntensity,
       setWorkoutNote,
+      adjustWeight,
+      adjustSets,
+      adjustReps,
+      adjustCardioMinutes,
     },
     addWorkout,
     deleteWorkout,

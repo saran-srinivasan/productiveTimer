@@ -1,12 +1,14 @@
+import { FocusTask, WorkoutKind } from "./types/ledger";
+
 export const STORAGE_KEY = "focus-ledger-v1";
 
-export const starterTasks = [
-  { id: crypto.randomUUID(), name: "Gym", targetMinutes: 45, color: "#d84b35" },
-  { id: crypto.randomUUID(), name: "Code", targetMinutes: 120, color: "#287c6f" },
-  { id: crypto.randomUUID(), name: "Trade", targetMinutes: 60, color: "#c8952d" },
+export const starterTasks: FocusTask[] = [
+  { id: "task-gym", name: "Gym", targetMinutes: 45, color: "#ff5722" },
+  { id: "task-code", name: "Code", targetMinutes: 120, color: "#ccff00" },
+  { id: "task-trade", name: "Trade", targetMinutes: 60, color: "#00e5ff" },
 ];
 
-export const workoutPresets = {
+export const workoutPresets: Record<WorkoutKind, string[]> = {
   strength: [
     "Bench press",
     "Squat",

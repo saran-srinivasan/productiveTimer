@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, Dispatch, SetStateAction } from "react";
 import {
   fromCompletionRow,
   fromSessionRow,
@@ -13,12 +13,15 @@ import {
 } from "../supabaseClient";
 import { STORAGE_KEY } from "../constants";
 import { buildInitialLedger, canonicalizeData } from "../utils/ledger";
+import { LedgerData, SyncState } from "../types/ledger";
 
-const getInitialState = () => {
+const getInitialState = (): LedgerData => {
   const fallback = buildInitialLedger();
 
   try {
-    const stored = JSON.parse(localStorage.getItem(STORAGE_KEY));
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return fallback;
+    const stored = JSON.parse(raw);
     if (!stored?.tasks?.length) return fallback;
     return canonicalizeData(stored);
   } catch {
@@ -26,12 +29,19 @@ const getInitialState = () => {
   }
 };
 
-const byNewest = (dateKey) => (a, b) =>
+const byNewest = (dateKey: "endedAt" | "createdAt") => (a: any, b: any) =>
   new Date(b[dateKey]).getTime() - new Date(a[dateKey]).getTime();
 
-export const useLedgerData = () => {
-  const [data, setData] = useState(getInitialState);
-  const [syncState, setSyncState] = useState(
+export interface UseLedgerDataReturn {
+  data: LedgerData;
+  setData: Dispatch<SetStateAction<LedgerData>>;
+  syncState: SyncState;
+  setSyncState: Dispatch<SetStateAction<SyncState>>;
+}
+
+export const useLedgerData = (): UseLedgerDataReturn => {
+  const [data, setData] = useState<LedgerData>(getInitialState);
+  const [syncState, setSyncState] = useState<SyncState>(
     isSupabaseConfigured ? "Connecting" : "Local only",
   );
   const cloudReady = useRef(false);
@@ -43,7 +53,8 @@ export const useLedgerData = () => {
   }, [data]);
 
   useEffect(() => {
-    if (!isSupabaseConfigured) return undefined;
+    const client = supabase;
+    if (!isSupabaseConfigured || !client) return undefined;
 
     let cancelled = false;
 
@@ -55,19 +66,19 @@ export const useLedgerData = () => {
         { data: workoutRows, error: workoutsError },
         { data: completionRows, error: completionsError },
       ] = await Promise.all([
-        supabase
+        client
           .from("focus_tasks")
           .select("*")
           .order("created_at", { ascending: true }),
-        supabase
+        client
           .from("focus_sessions")
           .select("*")
           .order("ended_at", { ascending: false }),
-        supabase
+        client
           .from("workout_entries")
           .select("*")
           .order("created_at", { ascending: false }),
-        supabase
+        client
           .from("task_completions")
           .select("*")
           .order("created_at", { ascending: false }),
@@ -138,7 +149,8 @@ export const useLedgerData = () => {
   }, []);
 
   useEffect(() => {
-    if (!isSupabaseConfigured || !cloudReady.current) return undefined;
+    const client = supabase;
+    if (!isSupabaseConfigured || !cloudReady.current || !client) return undefined;
 
     const syncTimer = window.setTimeout(async () => {
       setSyncState("Saving");
@@ -149,22 +161,22 @@ export const useLedgerData = () => {
         { error: completionsError },
       ] = await Promise.all([
         data.tasks.length
-          ? supabase
+          ? client
               .from("focus_tasks")
               .upsert(data.tasks.map(toTaskRow), { onConflict: "id" })
           : Promise.resolve({ error: null }),
         completionCloudReady.current && data.completions.length
-          ? supabase
+          ? client
               .from("task_completions")
               .upsert(data.completions.map(toCompletionRow), { onConflict: "id" })
           : Promise.resolve({ error: null }),
         data.sessions.length
-          ? supabase
+          ? client
               .from("focus_sessions")
               .upsert(data.sessions.map(toSessionRow), { onConflict: "id" })
           : Promise.resolve({ error: null }),
         workoutCloudReady.current && data.workouts.length
-          ? supabase
+          ? client
               .from("workout_entries")
               .upsert(data.workouts.map(toWorkoutRow), { onConflict: "id" })
           : Promise.resolve({ error: null }),

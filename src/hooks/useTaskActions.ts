@@ -1,15 +1,27 @@
-import { useState } from "react";
+import { useState, Dispatch, SetStateAction, FormEvent } from "react";
 import { isSupabaseConfigured, supabase } from "../supabaseClient";
 import { todayKey } from "../utils/date";
-import { normalizeTaskName } from "../utils/ledger";
+import { normalizeTaskName, safeId } from "../utils/ledger";
+import { playTacticalSound } from "../utils/sound";
+import { LedgerData, SyncState } from "../types/ledger";
 
-export const useTaskActions = ({ setData, setSyncState }) => {
+interface UseTaskActionsParams {
+  setData: Dispatch<SetStateAction<LedgerData>>;
+  setSyncState: Dispatch<SetStateAction<SyncState>>;
+  soundEnabled?: boolean;
+}
+
+export const useTaskActions = ({
+  setData,
+  setSyncState,
+  soundEnabled = true,
+}: UseTaskActionsParams) => {
   const [taskName, setTaskName] = useState("");
   const [taskTarget, setTaskTarget] = useState(45);
-  const [taskColor, setTaskColor] = useState("#287c6f");
+  const [taskColor, setTaskColor] = useState("#ccff00");
   const [note, setNote] = useState("");
 
-  const createTask = (event) => {
+  const createTask = (event: FormEvent) => {
     event.preventDefault();
     const cleanName = taskName.trim().replace(/\s+/g, " ");
     if (!cleanName) return;
@@ -20,12 +32,14 @@ export const useTaskActions = ({ setData, setSyncState }) => {
       );
       if (alreadyExists) return current;
 
+      playTacticalSound("click", soundEnabled);
+
       return {
         ...current,
         tasks: [
           ...current.tasks,
           {
-            id: crypto.randomUUID(),
+            id: safeId(),
             name: cleanName,
             targetMinutes: Number(taskTarget) || 30,
             color: taskColor,
@@ -37,9 +51,11 @@ export const useTaskActions = ({ setData, setSyncState }) => {
     setTaskTarget(45);
   };
 
-  const startTask = (taskId) => {
+  const startTask = (taskId: string, targetMinutes?: number | null) => {
     setData((current) => {
       if (current.active?.taskId === taskId || current.active) return current;
+
+      playTacticalSound("start", soundEnabled);
 
       return {
         ...current,
@@ -47,6 +63,7 @@ export const useTaskActions = ({ setData, setSyncState }) => {
           taskId,
           startedAt: Date.now(),
           elapsedSeconds: 0,
+          targetSeconds: targetMinutes ? targetMinutes * 60 : null,
           paused: false,
         },
       };
@@ -57,6 +74,8 @@ export const useTaskActions = ({ setData, setSyncState }) => {
   const pauseTimer = () => {
     setData((current) => {
       if (!current.active) return current;
+
+      playTacticalSound("pause", soundEnabled);
 
       return {
         ...current,
@@ -75,6 +94,9 @@ export const useTaskActions = ({ setData, setSyncState }) => {
   const resumeTimer = () => {
     setData((current) => {
       if (!current.active) return current;
+
+      playTacticalSound("start", soundEnabled);
+
       return {
         ...current,
         active: { ...current.active, startedAt: Date.now(), paused: false },
@@ -94,12 +116,14 @@ export const useTaskActions = ({ setData, setSyncState }) => {
 
       if (seconds < 1) return { ...current, active: null };
 
+      playTacticalSound("complete", soundEnabled);
+
       return {
         ...current,
         active: null,
         sessions: [
           {
-            id: crypto.randomUUID(),
+            id: safeId(),
             taskId: current.active.taskId,
             seconds,
             note: note.trim(),
@@ -113,7 +137,9 @@ export const useTaskActions = ({ setData, setSyncState }) => {
     setNote("");
   };
 
-  const deleteTask = (taskId) => {
+  const deleteTask = (taskId: string) => {
+    playTacticalSound("click", soundEnabled);
+
     setData((current) => ({
       ...current,
       tasks: current.tasks.filter((task) => task.id !== taskId),
@@ -124,8 +150,9 @@ export const useTaskActions = ({ setData, setSyncState }) => {
       active: current.active?.taskId === taskId ? null : current.active,
     }));
 
-    if (isSupabaseConfigured) {
-      supabase
+    const client = supabase;
+    if (isSupabaseConfigured && client) {
+      client
         .from("focus_tasks")
         .delete()
         .eq("id", taskId)

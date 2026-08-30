@@ -1,44 +1,59 @@
 import { useMemo } from "react";
+import { FocusStats, FocusTask, FocusSession, WorkoutEntry, WorkoutStats } from "../types/ledger";
 import { todayKey } from "../utils/date";
 
-export const useFocusStats = (tasks, sessions) =>
+export const useFocusStats = (
+  tasks: FocusTask[],
+  sessions: FocusSession[],
+): FocusStats =>
   useMemo(() => {
     const today = todayKey();
-    const totalsByTask = new Map(tasks.map((task) => [task.id, 0]));
-    const todayByTask = new Map(tasks.map((task) => [task.id, 0]));
-    const byDate = new Map();
+    const totalsByTask = new Map<string, number>(tasks.map((task) => [task.id, 0]));
+    const todayByTask = new Map<string, number>(tasks.map((task) => [task.id, 0]));
+    const byDate = new Map<
+      string,
+      { seconds: number; sessions: number; byTask: Map<string, number> }
+    >();
     let todaySeconds = 0;
     let weekSeconds = 0;
     const sevenDaysAgo = Date.now() - 6 * 24 * 60 * 60 * 1000;
 
     for (const session of sessions) {
+      const validSeconds = Number(session.seconds) || 0;
       totalsByTask.set(
         session.taskId,
-        (totalsByTask.get(session.taskId) ?? 0) + session.seconds,
+        (totalsByTask.get(session.taskId) ?? 0) + validSeconds,
       );
 
       if (session.date === today) {
         todayByTask.set(
           session.taskId,
-          (todayByTask.get(session.taskId) ?? 0) + session.seconds,
+          (todayByTask.get(session.taskId) ?? 0) + validSeconds,
         );
-        todaySeconds += session.seconds;
+        todaySeconds += validSeconds;
       }
 
-      if (new Date(session.endedAt).getTime() >= sevenDaysAgo) {
-        weekSeconds += session.seconds;
+      const endedAtMs = session.endedAt ? new Date(session.endedAt).getTime() : 0;
+      if (endedAtMs && endedAtMs >= sevenDaysAgo) {
+        weekSeconds += validSeconds;
+      } else if (
+        !endedAtMs &&
+        session.date &&
+        new Date(`${session.date}T12:00:00`).getTime() >= sevenDaysAgo
+      ) {
+        weekSeconds += validSeconds;
       }
 
       const currentDay = byDate.get(session.date) ?? {
         seconds: 0,
         sessions: 0,
-        byTask: new Map(),
+        byTask: new Map<string, number>(),
       };
-      currentDay.seconds += session.seconds;
+      currentDay.seconds += validSeconds;
       currentDay.sessions += 1;
       currentDay.byTask.set(
         session.taskId,
-        (currentDay.byTask.get(session.taskId) ?? 0) + session.seconds,
+        (currentDay.byTask.get(session.taskId) ?? 0) + validSeconds,
       );
       byDate.set(session.date, currentDay);
     }
@@ -47,6 +62,29 @@ export const useFocusStats = (tasks, sessions) =>
       .map((task) => ({ ...task, seconds: totalsByTask.get(task.id) ?? 0 }))
       .sort((a, b) => b.seconds - a.seconds)[0];
 
+    // Calculate Active Day Streak
+    const activeDates = new Set(
+      sessions
+        .filter((s) => (Number(s.seconds) || 0) > 0 && s.date)
+        .map((s) => s.date),
+    );
+
+    let currentStreak = 0;
+    const checkDate = new Date();
+    const todayStr = today;
+    checkDate.setDate(checkDate.getDate() - 1);
+    const yesterdayStr = checkDate.toISOString().slice(0, 10);
+
+    const pointer = new Date();
+    if (!activeDates.has(todayStr) && activeDates.has(yesterdayStr)) {
+      pointer.setDate(pointer.getDate() - 1);
+    }
+
+    while (activeDates.has(pointer.toISOString().slice(0, 10))) {
+      currentStreak++;
+      pointer.setDate(pointer.getDate() - 1);
+    }
+
     return {
       totalsByTask,
       todayByTask,
@@ -54,10 +92,11 @@ export const useFocusStats = (tasks, sessions) =>
       weekSeconds,
       topTask,
       byDate,
+      currentStreak,
     };
   }, [sessions, tasks]);
 
-export const useWorkoutStats = (workouts) =>
+export const useWorkoutStats = (workouts: WorkoutEntry[]): WorkoutStats =>
   useMemo(() => {
     const today = todayKey();
     const byDate = new Map();
@@ -100,7 +139,7 @@ export const useWorkoutStats = (workouts) =>
         todayCardioMinutes += cardioMinutes;
       }
 
-      if (new Date(`${workout.date}T12:00:00`).getTime() >= sevenDaysAgo) {
+      if (workout.date && new Date(`${workout.date}T12:00:00`).getTime() >= sevenDaysAgo) {
         weekEntries += 1;
         weekCardioMinutes += cardioMinutes;
         weekStrengthVolume += volume;

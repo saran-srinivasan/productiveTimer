@@ -1,8 +1,24 @@
+import { Dispatch, SetStateAction } from "react";
 import { isSupabaseConfigured, supabase } from "../supabaseClient";
+import { safeId } from "../utils/ledger";
+import { playTacticalSound } from "../utils/sound";
+import { LedgerData, SyncState } from "../types/ledger";
 
-export const useCompletionActions = ({ setData, setSyncState }) => {
-  const markCompletion = ({ taskId, date }) => {
+interface UseCompletionActionsParams {
+  setData: Dispatch<SetStateAction<LedgerData>>;
+  setSyncState: Dispatch<SetStateAction<SyncState>>;
+  soundEnabled?: boolean;
+}
+
+export const useCompletionActions = ({
+  setData,
+  setSyncState,
+  soundEnabled = true,
+}: UseCompletionActionsParams) => {
+  const markCompletion = ({ taskId, date }: { taskId: string; date: string }) => {
     if (!taskId || !date) return;
+
+    playTacticalSound("complete", soundEnabled);
 
     setData((current) => {
       if (
@@ -17,7 +33,7 @@ export const useCompletionActions = ({ setData, setSyncState }) => {
         ...current,
         completions: [
           {
-            id: crypto.randomUUID(),
+            id: safeId(),
             taskId,
             date,
             createdAt: new Date().toISOString(),
@@ -28,8 +44,10 @@ export const useCompletionActions = ({ setData, setSyncState }) => {
     });
   };
 
-  const removeCompletion = ({ taskId, date }) => {
+  const removeCompletion = ({ taskId, date }: { taskId: string; date: string }) => {
     if (!taskId || !date) return;
+
+    playTacticalSound("click", soundEnabled);
 
     setData((current) => ({
       ...current,
@@ -38,8 +56,9 @@ export const useCompletionActions = ({ setData, setSyncState }) => {
       ),
     }));
 
-    if (isSupabaseConfigured) {
-      supabase
+    const client = supabase;
+    if (isSupabaseConfigured && client) {
+      client
         .from("task_completions")
         .delete()
         .eq("task_id", taskId)

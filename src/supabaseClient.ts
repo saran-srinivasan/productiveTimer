@@ -1,31 +1,34 @@
-import { createClient } from "@supabase/supabase-js";
+import { createClient, SupabaseClient } from "@supabase/supabase-js";
+import { FocusTask, FocusSession, WorkoutEntry, TaskCompletion } from "./types/ledger";
 
 export const supabaseUrl =
-  import.meta.env.VITE_SUPABASE_URL ?? "https://ngpoiiwvungwupxyhmas.supabase.co";
+  (import.meta as unknown as { env: Record<string, string> }).env.VITE_SUPABASE_URL ??
+  "https://ngpoiiwvungwupxyhmas.supabase.co";
 
-export const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+export const supabaseAnonKey = (import.meta as unknown as { env: Record<string, string> }).env
+  .VITE_SUPABASE_ANON_KEY;
 
 export const isSupabaseConfigured = Boolean(supabaseUrl && supabaseAnonKey);
 
-export const supabase = isSupabaseConfigured
+export const supabase: SupabaseClient | null = isSupabaseConfigured
   ? createClient(supabaseUrl, supabaseAnonKey)
   : null;
 
-export const toTaskRow = (task) => ({
+export const toTaskRow = (task: FocusTask) => ({
   id: task.id,
   name: task.name,
   target_minutes: task.targetMinutes,
   color: task.color,
 });
 
-export const fromTaskRow = (row) => ({
+export const fromTaskRow = (row: any): FocusTask => ({
   id: row.id,
   name: row.name,
   targetMinutes: row.target_minutes,
   color: row.color,
 });
 
-export const toSessionRow = (session) => ({
+export const toSessionRow = (session: FocusSession) => ({
   id: session.id,
   task_id: session.taskId,
   seconds: session.seconds,
@@ -34,7 +37,7 @@ export const toSessionRow = (session) => ({
   ended_at: session.endedAt,
 });
 
-export const fromSessionRow = (row) => ({
+export const fromSessionRow = (row: any): FocusSession => ({
   id: row.id,
   taskId: row.task_id,
   seconds: row.seconds,
@@ -43,7 +46,7 @@ export const fromSessionRow = (row) => ({
   endedAt: row.ended_at,
 });
 
-export const toWorkoutRow = (workout) => ({
+export const toWorkoutRow = (workout: WorkoutEntry) => ({
   id: workout.id,
   work_date: workout.date,
   kind: workout.kind,
@@ -58,7 +61,7 @@ export const toWorkoutRow = (workout) => ({
   created_at: workout.createdAt,
 });
 
-export const fromWorkoutRow = (row) => ({
+export const fromWorkoutRow = (row: any): WorkoutEntry => ({
   id: row.id,
   date: row.work_date,
   kind: row.kind,
@@ -73,14 +76,14 @@ export const fromWorkoutRow = (row) => ({
   createdAt: row.created_at,
 });
 
-export const toCompletionRow = (completion) => ({
+export const toCompletionRow = (completion: TaskCompletion) => ({
   id: completion.id,
   task_id: completion.taskId,
   completion_date: completion.date,
   created_at: completion.createdAt,
 });
 
-export const fromCompletionRow = (row) => ({
+export const fromCompletionRow = (row: any): TaskCompletion => ({
   id: row.id,
   taskId: row.task_id,
   date: row.completion_date,

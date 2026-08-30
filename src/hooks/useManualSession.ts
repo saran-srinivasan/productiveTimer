@@ -1,8 +1,23 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, Dispatch, SetStateAction, FormEvent } from "react";
+import { safeId } from "../utils/ledger";
+import { playTacticalSound } from "../utils/sound";
+import { FocusTask, LedgerData } from "../types/ledger";
 
-export const useManualSession = ({ tasks, selectedDate, setData }) => {
-  const [manualTaskId, setManualTaskId] = useState("");
-  const [manualMinutes, setManualMinutes] = useState(25);
+interface UseManualSessionParams {
+  tasks: FocusTask[];
+  selectedDate: string;
+  setData: Dispatch<SetStateAction<LedgerData>>;
+  soundEnabled?: boolean;
+}
+
+export const useManualSession = ({
+  tasks,
+  selectedDate,
+  setData,
+  soundEnabled = true,
+}: UseManualSessionParams) => {
+  const [manualTaskId, setManualTaskId] = useState<string>("");
+  const [manualMinutes, setManualMinutes] = useState<number | string>(25);
   const [manualNote, setManualNote] = useState("");
 
   useEffect(() => {
@@ -13,18 +28,20 @@ export const useManualSession = ({ tasks, selectedDate, setData }) => {
     }
   }, [manualTaskId, tasks]);
 
-  const addManualSession = (event) => {
+  const addManualSession = (event: FormEvent) => {
     event.preventDefault();
     if (!manualTaskId || !selectedDate) return;
 
     const minutes = Number(manualMinutes);
     if (!minutes || minutes < 1) return;
 
+    playTacticalSound("complete", soundEnabled);
+
     setData((current) => ({
       ...current,
       sessions: [
         {
-          id: crypto.randomUUID(),
+          id: safeId(),
           taskId: manualTaskId,
           seconds: minutes * 60,
           note: manualNote.trim(),
