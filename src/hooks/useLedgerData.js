@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import {
+  fromCompletionRow,
   fromSessionRow,
   fromTaskRow,
   fromWorkoutRow,
@@ -7,6 +8,7 @@ import {
   supabase,
   toSessionRow,
   toTaskRow,
+  toCompletionRow,
   toWorkoutRow,
 } from "../supabaseClient";
 import { STORAGE_KEY } from "../constants";
@@ -34,6 +36,7 @@ export const useLedgerData = () => {
   );
   const cloudReady = useRef(false);
   const workoutCloudReady = useRef(true);
+  const completionCloudReady = useRef(true);
 
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
@@ -50,6 +53,7 @@ export const useLedgerData = () => {
         { data: taskRows, error: tasksError },
         { data: sessionRows, error: sessionsError },
         { data: workoutRows, error: workoutsError },
+        { data: completionRows, error: completionsError },
       ] = await Promise.all([
         supabase
           .from("focus_tasks")
@@ -63,6 +67,10 @@ export const useLedgerData = () => {
           .from("workout_entries")
           .select("*")
           .order("created_at", { ascending: false }),
+        supabase
+          .from("task_completions")
+          .select("*")
+          .order("created_at", { ascending: false }),
       ]);
 
       if (cancelled) return;
@@ -73,6 +81,7 @@ export const useLedgerData = () => {
       }
 
       if (workoutsError) workoutCloudReady.current = false;
+      if (completionsError) completionCloudReady.current = false;
 
       setData((current) => {
         const cloudTasks = (taskRows ?? []).map(fromTaskRow);
@@ -80,6 +89,9 @@ export const useLedgerData = () => {
         const cloudWorkouts = workoutsError
           ? []
           : (workoutRows ?? []).map(fromWorkoutRow);
+        const cloudCompletions = completionsError
+          ? []
+          : (completionRows ?? []).map(fromCompletionRow);
         const mergedSessions = [
           ...new Map(
             [...current.sessions, ...cloudSessions].map((session) => [
@@ -96,17 +108,26 @@ export const useLedgerData = () => {
             ]),
           ).values(),
         ].sort(byNewest("createdAt"));
+        const mergedCompletions = [
+          ...new Map(
+            [...current.completions, ...cloudCompletions].map((completion) => [
+              completion.id,
+              completion,
+            ]),
+          ).values(),
+        ].sort(byNewest("createdAt"));
 
         return canonicalizeData({
           ...current,
           tasks: [...cloudTasks, ...current.tasks],
           sessions: mergedSessions,
           workouts: mergedWorkouts,
+          completions: mergedCompletions,
         });
       });
 
       cloudReady.current = true;
-      setSyncState(workoutsError ? "Cloud error" : "Cloud synced");
+      setSyncState(workoutsError || completionsError ? "Cloud error" : "Cloud synced");
     };
 
     loadCloudData();
@@ -125,11 +146,17 @@ export const useLedgerData = () => {
         { error: tasksError },
         { error: sessionsError },
         { error: workoutsError },
+        { error: completionsError },
       ] = await Promise.all([
         data.tasks.length
           ? supabase
               .from("focus_tasks")
               .upsert(data.tasks.map(toTaskRow), { onConflict: "id" })
+          : Promise.resolve({ error: null }),
+        completionCloudReady.current && data.completions.length
+          ? supabase
+              .from("task_completions")
+              .upsert(data.completions.map(toCompletionRow), { onConflict: "id" })
           : Promise.resolve({ error: null }),
         data.sessions.length
           ? supabase
@@ -144,7 +171,7 @@ export const useLedgerData = () => {
       ]);
 
       setSyncState(
-        tasksError || sessionsError || workoutsError
+        tasksError || sessionsError || workoutsError || completionsError
           ? "Cloud error"
           : "Cloud synced",
       );

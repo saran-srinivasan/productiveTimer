@@ -75,10 +75,34 @@ export const canonicalizeData = (raw) => {
     ? (taskIdMap.get(raw.active.taskId) ?? raw.active.taskId)
     : null;
 
+  const completionKeys = new Set();
+  const completions = (raw?.completions ?? [])
+    .map((completion) => {
+      const taskId = taskIdMap.get(completion.taskId) ?? completion.taskId;
+      const date = completion.date;
+      if (!taskIds.has(taskId) || !/^\d{4}-\d{2}-\d{2}$/.test(date ?? "")) {
+        return null;
+      }
+
+      const key = `${taskId}:${date}`;
+      if (completionKeys.has(key)) return null;
+      completionKeys.add(key);
+
+      return {
+        id: completion.id ?? crypto.randomUUID(),
+        taskId,
+        date,
+        createdAt: completion.createdAt ?? new Date().toISOString(),
+      };
+    })
+    .filter(Boolean)
+    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
   return {
     tasks: [...tasksByName.values()],
     sessions,
     workouts,
+    completions,
     active:
       raw?.active && taskIds.has(activeTaskId)
         ? { ...raw.active, taskId: activeTaskId }

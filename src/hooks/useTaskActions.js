@@ -118,6 +118,9 @@ export const useTaskActions = ({ setData, setSyncState }) => {
       ...current,
       tasks: current.tasks.filter((task) => task.id !== taskId),
       sessions: current.sessions.filter((session) => session.taskId !== taskId),
+      completions: current.completions.filter(
+        (completion) => completion.taskId !== taskId,
+      ),
       active: current.active?.taskId === taskId ? null : current.active,
     }));
 

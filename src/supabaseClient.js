@@ -72,3 +72,17 @@ export const fromWorkoutRow = (row) => ({
   note: row.note ?? "",
   createdAt: row.created_at,
 });
+
+export const toCompletionRow = (completion) => ({
+  id: completion.id,
+  task_id: completion.taskId,
+  completion_date: completion.date,
+  created_at: completion.createdAt,
+});
+
+export const fromCompletionRow = (row) => ({
+  id: row.id,
+  taskId: row.task_id,
+  date: row.completion_date,
+  createdAt: row.created_at,
+});

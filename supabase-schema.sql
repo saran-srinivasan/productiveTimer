@@ -43,6 +43,20 @@ create index if not exists workout_entries_work_date_idx
 create index if not exists workout_entries_kind_idx
   on public.workout_entries (kind);
 
+create table if not exists public.task_completions (
+  id uuid primary key,
+  task_id uuid not null references public.focus_tasks(id) on delete cascade,
+  completion_date date not null,
+  created_at timestamptz not null default now(),
+  unique (task_id, completion_date)
+);
+
+create index if not exists task_completions_completion_date_idx
+  on public.task_completions (completion_date desc);
+
+create index if not exists task_completions_task_id_idx
+  on public.task_completions (task_id);
+
 with ranked_tasks as (
   select
     id,
@@ -78,10 +92,12 @@ create unique index if not exists focus_tasks_name_unique_idx
 alter table public.focus_tasks enable row level security;
 alter table public.focus_sessions enable row level security;
 alter table public.workout_entries enable row level security;
+alter table public.task_completions enable row level security;
 
 drop policy if exists "anon can manage focus tasks" on public.focus_tasks;
 drop policy if exists "anon can manage focus sessions" on public.focus_sessions;
 drop policy if exists "anon can manage workout entries" on public.workout_entries;
+drop policy if exists "anon can manage task completions" on public.task_completions;
 
 create policy "anon can manage focus tasks"
   on public.focus_tasks
@@ -99,6 +115,13 @@ create policy "anon can manage focus sessions"
 
 create policy "anon can manage workout entries"
   on public.workout_entries
+  for all
+  to anon
+  using (true)
+  with check (true);
+
+create policy "anon can manage task completions"
+  on public.task_completions
   for all
   to anon
   using (true)

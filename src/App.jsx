@@ -1,11 +1,12 @@
 import React from "react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { CalendarSection } from "./components/CalendarSection";
 import { Header } from "./components/Header";
 import { TimerStage } from "./components/TimerStage";
 import { WorkoutSection } from "./components/WorkoutSection";
 import { WorkspaceSection } from "./components/WorkspaceSection";
 import { useLedgerData } from "./hooks/useLedgerData";
+import { useCompletionActions } from "./hooks/useCompletionActions";
 import { useManualSession } from "./hooks/useManualSession";
 import { useNow } from "./hooks/useNow";
 import { useFocusStats, useWorkoutStats } from "./hooks/useStats";
@@ -17,11 +18,14 @@ function App() {
   const { data, setData, syncState, setSyncState } = useLedgerData();
   const [monthDate, setMonthDate] = useState(() => new Date());
   const [selectedDate, setSelectedDate] = useState(todayKey());
+  const [calendarTaskId, setCalendarTaskId] = useState("");
+  const [completionDialogDate, setCompletionDialogDate] = useState(null);
   const now = useNow();
   const stats = useFocusStats(data.tasks, data.sessions);
   const workoutStats = useWorkoutStats(data.workouts);
   const taskActions = useTaskActions({ setData, setSyncState });
   const workoutActions = useWorkoutForm({ setData, setSyncState });
+  const completionActions = useCompletionActions({ setData, setSyncState });
   const manualSession = useManualSession({
     tasks: data.tasks,
     selectedDate,
@@ -37,6 +41,13 @@ function App() {
     : 0;
   const activeIsPaused = Boolean(data.active?.paused);
 
+  useEffect(() => {
+    if (data.tasks.length && !data.tasks.some((task) => task.id === calendarTaskId)) {
+      setCalendarTaskId(data.tasks[0].id);
+    }
+    if (!data.tasks.length && calendarTaskId) setCalendarTaskId("");
+  }, [calendarTaskId, data.tasks]);
+
   const calendar = useMemo(() => {
     const visibleMonth = monthKey(monthDate);
     const monthSessions = data.sessions.filter((session) =>
@@ -45,6 +56,23 @@ function App() {
     const monthWorkouts = data.workouts.filter((workout) =>
       workout.date?.startsWith(visibleMonth),
     );
+    const goalSessions = data.sessions.filter(
+      (session) =>
+        session.taskId === calendarTaskId && session.date?.startsWith(visibleMonth),
+    );
+    const manualGoalCompletions = data.completions.filter(
+      (completion) =>
+        completion.taskId === calendarTaskId &&
+        completion.date?.startsWith(visibleMonth),
+    );
+    const autoCompletionDates = new Set(goalSessions.map((session) => session.date));
+    const manualCompletionDates = new Set(
+      manualGoalCompletions.map((completion) => completion.date),
+    );
+    const completionDates = new Set([
+      ...autoCompletionDates,
+      ...manualCompletionDates,
+    ]);
 
     return {
       monthDays: buildMonthDays(monthDate),
@@ -62,8 +90,13 @@ function App() {
             : 0),
         0,
       ),
+      autoCompletionDates,
+      manualCompletionDates,
+      completionDays: completionDates.size,
+      manualCompletionDays: manualCompletionDates.size,
+      focusCompletionDays: autoCompletionDates.size,
     };
-  }, [data.sessions, data.workouts, monthDate]);
+  }, [calendarTaskId, data.completions, data.sessions, data.workouts, monthDate]);
 
   const selectedSessions = useMemo(
     () => data.sessions.filter((session) => session.date === selectedDate),
@@ -89,6 +122,7 @@ function App() {
     [data.sessions],
   );
   const recentWorkouts = useMemo(() => data.workouts.slice(0, 6), [data.workouts]);
+  const calendarTask = data.tasks.find((task) => task.id === calendarTaskId);
 
   const changeMonth = (offset) => {
     setMonthDate(
@@ -134,17 +168,25 @@ function App() {
 
       <CalendarSection
         addManualSession={manualSession.addManualSession}
+        calendarTask={calendarTask}
+        calendarTaskId={calendarTaskId}
         calendar={calendar}
         changeMonth={changeMonth}
+        completionDialogDate={completionDialogDate}
         deleteWorkout={workoutActions.deleteWorkout}
         manualSession={manualSession}
+        markCompletion={completionActions.markCompletion}
         monthDate={monthDate}
+        onOpenCompletionDialog={setCompletionDialogDate}
+        removeCompletion={completionActions.removeCompletion}
         selectedDate={selectedDate}
         selectedSessions={selectedSessions}
         selectedTaskTotals={selectedTaskTotals}
         selectedWorkouts={selectedWorkouts}
         setMonthDate={setMonthDate}
         setSelectedDate={setSelectedDate}
+        setCalendarTaskId={setCalendarTaskId}
+        setCompletionDialogDate={setCompletionDialogDate}
         stats={stats}
         tasks={data.tasks}
         workoutStats={workoutStats}
