@@ -91,9 +91,9 @@ export function Header() {
           {workoutStats.todayStrengthVolume > 0 ? (
             <div
               className="stat-pill gym-stat"
-              title="Total weight lifted today"
+              title={`Total cumulative tonnage: sets × reps × weight (Top load: ${workoutStats.todayMaxWeight} kg)`}
             >
-              <span className="pill-label">Iron Load</span>
+              <span className="pill-label">Tonnage</span>
               <strong>{formatLoad(workoutStats.todayStrengthVolume)}</strong>
             </div>
           ) : null}

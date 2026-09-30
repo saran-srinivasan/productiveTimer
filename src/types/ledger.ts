@@ -91,9 +91,11 @@ export interface WorkoutStats {
   byDate: Map<string, WorkoutDayStats>;
   todayStrengthVolume: number;
   todayCardioMinutes: number;
+  todayMaxWeight: number;
   weekEntries: number;
   weekCardioMinutes: number;
   weekStrengthVolume: number;
+  weekMaxWeight: number;
 }
 
 export interface MonthDay {

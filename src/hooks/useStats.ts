@@ -102,17 +102,20 @@ export const useWorkoutStats = (workouts: WorkoutEntry[]): WorkoutStats =>
     const byDate = new Map();
     let todayStrengthVolume = 0;
     let todayCardioMinutes = 0;
+    let todayMaxWeight = 0;
     let weekEntries = 0;
     let weekCardioMinutes = 0;
     let weekStrengthVolume = 0;
+    let weekMaxWeight = 0;
     const sevenDaysAgo = Date.now() - 6 * 24 * 60 * 60 * 1000;
 
     for (const workout of workouts) {
+      const weight = Number(workout.weight) || 0;
       const volume =
         workout.kind === "strength"
           ? (Number(workout.sets) || 0) *
             (Number(workout.reps) || 0) *
-            (Number(workout.weight) || 0)
+            weight
           : 0;
       const cardioMinutes =
         workout.kind === "cardio" ? Number(workout.durationMinutes) || 0 : 0;
@@ -137,12 +140,18 @@ export const useWorkoutStats = (workouts: WorkoutEntry[]): WorkoutStats =>
       if (workout.date === today) {
         todayStrengthVolume += volume;
         todayCardioMinutes += cardioMinutes;
+        if (workout.kind === "strength" && weight > todayMaxWeight) {
+          todayMaxWeight = weight;
+        }
       }
 
       if (workout.date && new Date(`${workout.date}T12:00:00`).getTime() >= sevenDaysAgo) {
         weekEntries += 1;
         weekCardioMinutes += cardioMinutes;
         weekStrengthVolume += volume;
+        if (workout.kind === "strength" && weight > weekMaxWeight) {
+          weekMaxWeight = weight;
+        }
       }
     }
 
@@ -150,8 +159,10 @@ export const useWorkoutStats = (workouts: WorkoutEntry[]): WorkoutStats =>
       byDate,
       todayStrengthVolume,
       todayCardioMinutes,
+      todayMaxWeight,
       weekEntries,
       weekCardioMinutes,
       weekStrengthVolume,
+      weekMaxWeight,
     };
   }, [workouts]);
