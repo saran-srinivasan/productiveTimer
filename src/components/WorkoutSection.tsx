@@ -1,4 +1,5 @@
 import React, { FormEvent, useState } from "react";
+import { Link } from "@tanstack/react-router";
 import { intensityOptions, workoutPresets } from "../constants";
 import { formatClock, formatLoad } from "../utils/format";
 import { WorkoutRow } from "./WorkoutRow";
@@ -963,6 +964,17 @@ export function WorkoutSection({
               <p className="eyebrow">7-DAY TELEMETRY</p>
               <h2>Session Stream</h2>
             </div>
+            <Link
+              to="/telemetry"
+              style={{
+                fontSize: "0.68rem",
+                fontFamily: "var(--font-mono)",
+                color: "var(--hazard-orange)",
+                textDecoration: "none",
+              }}
+            >
+              [View All →]
+            </Link>
           </div>
 
           <div

@@ -10,6 +10,7 @@ import { TimerStage } from "./components/TimerStage";
 import { WorkspaceSection } from "./components/WorkspaceSection";
 import { WorkoutSection } from "./components/WorkoutSection";
 import { CalendarSection } from "./components/CalendarSection";
+import { FullTelemetryView } from "./components/FullTelemetryView";
 import { useLedgerContext } from "./context/LedgerContext";
 
 // Root Route layout
@@ -251,12 +252,19 @@ const calendarRoute = createRoute({
   component: CalendarView,
 });
 
+const telemetryRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/telemetry",
+  component: FullTelemetryView,
+});
+
 // Route Tree & Router Instance
 const routeTree = rootRoute.addChildren([
   indexRoute,
   focusRoute,
   gymRoute,
   calendarRoute,
+  telemetryRoute,
 ]);
 
 export const router = createRouter({

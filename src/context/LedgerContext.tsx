@@ -185,12 +185,12 @@ export function LedgerProvider({ children }: { children: ReactNode }) {
   );
   const recentSessions = useMemo(
     () => ({
-      items: data.sessions.slice(0, 12),
+      items: data.sessions.slice(0, 5),
       totalCount: data.sessions.length,
     }),
     [data.sessions],
   );
-  const recentWorkouts = useMemo(() => data.workouts.slice(0, 8), [data.workouts]);
+  const recentWorkouts = useMemo(() => data.workouts.slice(0, 5), [data.workouts]);
   const calendarTask = data.tasks.find((task) => task.id === calendarTaskId);
 
   const changeMonth = (offset: number) => {

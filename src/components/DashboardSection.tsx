@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { Link } from "@tanstack/react-router";
 import { LogRow } from "./LogRow";
 import { formatDuration } from "../utils/format";
 import { FocusSession, FocusStats, FocusTask, SyncState } from "../types/ledger";
@@ -92,7 +93,20 @@ export function DashboardSection({
           className="panel-heading compact"
           style={{ flexWrap: "wrap", gap: "8px" }}
         >
-          <h2>Telemetry Stream</h2>
+          <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+            <h2>Telemetry Stream</h2>
+            <Link
+              to="/telemetry"
+              style={{
+                fontSize: "0.68rem",
+                fontFamily: "var(--font-mono)",
+                color: "var(--volt-lime)",
+                textDecoration: "none",
+              }}
+            >
+              [View All →]
+            </Link>
+          </div>
           <input
             type="text"
             value={searchQuery}
@@ -103,7 +117,7 @@ export function DashboardSection({
               fontSize: "0.72rem",
               fontFamily: "var(--font-mono)",
               minHeight: "28px",
-              width: "120px",
+              width: "105px",
               background: "var(--panel-recessed)",
             }}
           />
