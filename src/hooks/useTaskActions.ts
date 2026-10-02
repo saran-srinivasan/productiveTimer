@@ -1,7 +1,7 @@
 import { useState, Dispatch, SetStateAction, FormEvent } from "react";
 import { isSupabaseConfigured, supabase } from "../supabaseClient";
 import { todayKey } from "../utils/date";
-import { normalizeTaskName, safeId } from "../utils/ledger";
+import { getTaskStampIcon, normalizeTaskName, safeId } from "../utils/ledger";
 import { playTacticalSound } from "../utils/sound";
 import { LedgerData, SyncState } from "../types/ledger";
 
@@ -43,6 +43,7 @@ export const useTaskActions = ({
             name: cleanName,
             targetMinutes: Number(taskTarget) || 30,
             color: taskColor,
+            icon: getTaskStampIcon(cleanName),
           },
         ],
       };
@@ -162,6 +163,26 @@ export const useTaskActions = ({
     }
   };
 
+  const deleteSession = (sessionId: string) => {
+    playTacticalSound("click", soundEnabled);
+
+    setData((current) => ({
+      ...current,
+      sessions: current.sessions.filter((session) => session.id !== sessionId),
+    }));
+
+    const client = supabase;
+    if (isSupabaseConfigured && client) {
+      client
+        .from("focus_sessions")
+        .delete()
+        .eq("id", sessionId)
+        .then(({ error }) => {
+          if (error) setSyncState("Cloud error");
+        });
+    }
+  };
+
   return {
     taskForm: {
       taskName,
@@ -178,5 +199,6 @@ export const useTaskActions = ({
     resumeTimer,
     logSession,
     deleteTask,
+    deleteSession,
   };
 };

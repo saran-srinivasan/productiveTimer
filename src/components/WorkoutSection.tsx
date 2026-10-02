@@ -997,9 +997,10 @@ export function WorkoutSection({
 
           <div className="recent-log-list">
             {recentWorkouts.length ? (
-              recentWorkouts.map((workout) => (
+              recentWorkouts.map((workout, idx) => (
                 <WorkoutRow
                   key={workout.id}
+                  index={idx}
                   onDelete={deleteWorkout}
                   workout={workout}
                 />

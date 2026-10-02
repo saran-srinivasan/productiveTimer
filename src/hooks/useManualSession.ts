@@ -55,6 +55,34 @@ export const useManualSession = ({
     setManualNote("");
   };
 
+  const addDirectSession = (
+    taskId: string,
+    date: string,
+    minutes: number,
+    note = "",
+  ) => {
+    if (!taskId || !date) return;
+    const mins = Number(minutes);
+    if (!mins || mins < 1) return;
+
+    playTacticalSound("complete", soundEnabled);
+
+    setData((current) => ({
+      ...current,
+      sessions: [
+        {
+          id: safeId(),
+          taskId,
+          seconds: mins * 60,
+          note: note.trim(),
+          date,
+          endedAt: new Date(`${date}T18:00:00`).toISOString(),
+        },
+        ...current.sessions,
+      ],
+    }));
+  };
+
   return {
     manualTaskId,
     manualMinutes,
@@ -63,5 +91,6 @@ export const useManualSession = ({
     setManualMinutes,
     setManualNote,
     addManualSession,
+    addDirectSession,
   };
 };

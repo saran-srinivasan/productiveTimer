@@ -1,5 +1,6 @@
 import React, { FormEvent } from "react";
 import { formatDuration } from "../utils/format";
+import { getTaskStampIcon } from "../utils/ledger";
 import { ActiveTimer, FocusStats, FocusTask } from "../types/ledger";
 
 interface TasksSectionProps {
@@ -56,6 +57,9 @@ export function TasksSection({
               <div className="task-topline">
                 <div className="task-title-group">
                   <span className="task-dot" />
+                  <span className="task-icon-badge" style={{ fontSize: "1.1rem" }}>
+                    {getTaskStampIcon(task)}
+                  </span>
                   <h3 title={task.name}>{task.name}</h3>
                 </div>
                 <button

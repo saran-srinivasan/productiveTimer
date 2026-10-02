@@ -1,9 +1,11 @@
-import React, { useEffect, useRef, FormEvent } from "react";
+import React, { FormEvent } from "react";
 import { weekDays } from "../constants";
 import { formatDuration } from "../utils/format";
 import { monthTitle } from "../utils/date";
 import { LogRow } from "./LogRow";
 import { WorkoutRow } from "./WorkoutRow";
+import { DayActivityDialog } from "./DayActivityDialog";
+import { getTaskStampIcon } from "../utils/ledger";
 import {
   CalendarMonthData,
   FocusSession,
@@ -12,91 +14,6 @@ import {
   WorkoutEntry,
   WorkoutStats,
 } from "../types/ledger";
-
-interface CompletionDialogProps {
-  date: string | null;
-  hasAutoCompletion: boolean;
-  hasManualCompletion: boolean;
-  onClose: () => void;
-  onMark: (payload: { taskId: string; date: string }) => void;
-  onRemove: (payload: { taskId: string; date: string }) => void;
-  task?: FocusTask;
-}
-
-function CompletionDialog({
-  date,
-  hasAutoCompletion,
-  hasManualCompletion,
-  onClose,
-  onMark,
-  onRemove,
-  task,
-}: CompletionDialogProps) {
-  const actionRef = useRef<HTMLButtonElement>(null);
-
-  useEffect(() => {
-    if (!date) return undefined;
-    actionRef.current?.focus();
-    const onKeyDown = (event: KeyboardEvent) => event.key === "Escape" && onClose();
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [date, onClose]);
-
-  if (!date || !task) return null;
-
-  const handleAction = () => {
-    if (hasManualCompletion) {
-      onRemove({ taskId: task.id, date });
-    } else {
-      onMark({ taskId: task.id, date });
-    }
-    onClose();
-  };
-
-  return (
-    <div className="completion-dialog-backdrop" onMouseDown={onClose}>
-      <section
-        aria-labelledby="completion-dialog-title"
-        aria-modal="true"
-        className="completion-dialog"
-        onMouseDown={(event) => event.stopPropagation()}
-        role="dialog"
-      >
-        <p className="eyebrow">[STAMP.TERMINAL] // HABIT AUDIT</p>
-        <h2 id="completion-dialog-title">{task.name}</h2>
-        <p className="completion-dialog-date">DATE STAMP: {date}</p>
-
-        <p className="completion-dialog-copy">
-          {hasManualCompletion
-            ? "Manual 'X' stamp recorded on punch card. Remove stamp?"
-            : "Stamp physical completion 'X' on this date punch card?"}
-        </p>
-
-        {hasAutoCompletion ? (
-          <p className="completion-dialog-note">
-            ⚡ Focus telemetry automatically stamped an 'X' on this date card.
-          </p>
-        ) : null}
-
-        <div className="completion-dialog-actions">
-          <button className="btn btn-secondary" onClick={onClose} type="button">
-            Cancel
-          </button>
-          <button
-            className={`btn ${
-              hasManualCompletion ? "btn-danger" : "btn-primary"
-            }`}
-            onClick={handleAction}
-            ref={actionRef}
-            type="button"
-          >
-            {hasManualCompletion ? "Revoke Stamp" : "Execute 'X' Stamp"}
-          </button>
-        </div>
-      </section>
-    </div>
-  );
-}
 
 interface CalendarSectionProps {
   addManualSession: (e: FormEvent) => void;
@@ -129,15 +46,25 @@ interface CalendarSectionProps {
   stats: FocusStats;
   tasks: FocusTask[];
   workoutStats: WorkoutStats;
+  sessions?: FocusSession[];
+  deleteSession?: (sessionId: string) => void;
+  addDirectSession?: (
+    taskId: string,
+    date: string,
+    minutes: number,
+    note?: string,
+  ) => void;
 }
 
 export function CalendarSection({
+  addDirectSession,
   addManualSession,
   calendar,
   calendarTask,
   calendarTaskId,
   changeMonth,
   completionDialogDate,
+  deleteSession,
   deleteWorkout,
   manualSession,
   markCompletion,
@@ -148,6 +75,7 @@ export function CalendarSection({
   selectedSessions,
   selectedTaskTotals,
   selectedWorkouts,
+  sessions,
   setCalendarTaskId,
   setCompletionDialogDate,
   setMonthDate,
@@ -163,9 +91,11 @@ export function CalendarSection({
     ? calendar.autoCompletionDates.has(completionDialogDate)
     : false;
 
+  const laneStampIcon = getTaskStampIcon(calendarTask);
+
   const openCompletionDialog = (date: string) => {
     setSelectedDate(date);
-    if (calendarTask) onOpenCompletionDialog(date);
+    onOpenCompletionDialog(date);
   };
 
   return (
@@ -220,15 +150,15 @@ export function CalendarSection({
 
       <div className="month-summary">
         <div className="summary-card highlight">
-          <span>Total X Days</span>
+          <span>{laneStampIcon} Total Stamps</span>
           <strong>{calendar.completionDays}</strong>
         </div>
         <div className="summary-card">
-          <span>Manual X Stamps</span>
+          <span>Manual Stamps</span>
           <strong>{calendar.manualCompletionDays}</strong>
         </div>
         <div className="summary-card">
-          <span>Focus-Log X</span>
+          <span>Focus-Log Stamps</span>
           <strong>{calendar.focusCompletionDays}</strong>
         </div>
         <div className="summary-card">
@@ -239,13 +169,13 @@ export function CalendarSection({
 
       <div className="completion-legend">
         <span className="legend-item">
-          <b className="legend-x">X</b> Manual ink stamp
+          <span className="legend-stamp">{laneStampIcon}</span> Manual stamp
         </span>
         <span className="legend-item">
-          <b className="legend-x is-auto">X</b> Auto focus stamp
+          <span className="legend-stamp is-auto">⚡</span> Auto focus stamp
         </span>
         <span className="legend-item">
-          <b className="legend-x is-both">X</b> Verified both
+          <span className="legend-stamp is-both">{laneStampIcon}⚡</span> Verified both
         </span>
       </div>
 
@@ -299,6 +229,35 @@ export function CalendarSection({
                       ? "auto"
                       : "";
 
+              // Find other lanes completed / active on this same day
+              const otherCompletedLanes = tasks.filter((taskItem) => {
+                if (taskItem.id === calendarTaskId) return false;
+                const secs = dayStats?.byTask.get(taskItem.id) ?? 0;
+                if (secs > 0) return true;
+                const isGym =
+                  /\b(gym|workout|lift|fitness|iron|strength)\b/i.test(taskItem.name) ||
+                  taskItem.id === "task-gym";
+                if (isGym && workoutDayStats && workoutDayStats.entries.length > 0)
+                  return true;
+                return false;
+              });
+
+              const hasWorkout = Boolean(
+                workoutDayStats && workoutDayStats.entries.length > 0,
+              );
+              const isCurrentGym = calendarTask
+                ? /\b(gym|workout|lift|fitness|iron|strength)\b/i.test(
+                    calendarTask.name,
+                  ) || calendarTask.id === "task-gym"
+                : false;
+              const anyOtherIsGym = otherCompletedLanes.some(
+                (t) =>
+                  /\b(gym|workout|lift|fitness|iron|strength)\b/i.test(t.name) ||
+                  t.id === "task-gym",
+              );
+              const showStandaloneWorkout =
+                hasWorkout && !isCurrentGym && !anyOtherIsGym;
+
               return (
                 <button
                   aria-label={`${day.dateKey}${
@@ -319,17 +278,34 @@ export function CalendarSection({
                 >
                   <div className="calendar-day-header">
                     <span>{day.day}</span>
-                    {workoutDayStats ? (
-                      <em className="day-workout-mark" title="Workout logged">
-                        🏋️
-                      </em>
-                    ) : null}
+                    <div className="day-corner-marks">
+                      {otherCompletedLanes.map((otherTask) => (
+                        <span
+                          className="day-other-lane-mark"
+                          key={otherTask.id}
+                          title={`${otherTask.name} done on this date`}
+                        >
+                          {getTaskStampIcon(otherTask)}
+                        </span>
+                      ))}
+                      {showStandaloneWorkout ? (
+                        <span
+                          className="day-other-lane-mark"
+                          title="Workout logged on this date"
+                        >
+                          🏋️
+                        </span>
+                      ) : null}
+                    </div>
                   </div>
 
                   {completionState ? (
-                    <b className="completion-x" aria-hidden="true">
-                      X
-                    </b>
+                    <span
+                      aria-hidden="true"
+                      className={`completion-stamp-icon completion-x completion-state-${completionState}`}
+                    >
+                      {laneStampIcon}
+                    </span>
                   ) : null}
 
                   <strong className="day-time-format">
@@ -453,9 +429,10 @@ export function CalendarSection({
             </div>
             <div className="recent-log-list">
               {selectedWorkouts.length ? (
-                selectedWorkouts.map((workout) => (
+                selectedWorkouts.map((workout, idx) => (
                   <WorkoutRow
                     key={workout.id}
+                    index={idx}
                     onDelete={deleteWorkout}
                     workout={workout}
                   />
@@ -468,14 +445,25 @@ export function CalendarSection({
         </aside>
       </div>
 
-      <CompletionDialog
+      <DayActivityDialog
         date={completionDialogDate}
         hasAutoCompletion={dialogAuto}
         hasManualCompletion={dialogManual}
+        onAddDirectSession={addDirectSession}
         onClose={() => setCompletionDialogDate(null)}
-        onMark={markCompletion}
-        onRemove={removeCompletion}
-        task={calendarTask}
+        onDeleteSession={deleteSession}
+        onDeleteWorkout={deleteWorkout}
+        onMarkCompletion={markCompletion}
+        onRemoveCompletion={removeCompletion}
+        onSelectTask={setCalendarTaskId}
+        sessions={sessions ?? selectedSessions}
+        task={calendarTask || tasks[0]}
+        tasks={tasks}
+        workouts={
+          completionDialogDate
+            ? workoutStats.byDate.get(completionDialogDate)?.entries ?? []
+            : []
+        }
       />
     </section>
   );

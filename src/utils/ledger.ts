@@ -20,6 +20,122 @@ export const safeId = (): string => {
 export const normalizeTaskName = (name: string): string =>
   name.trim().replace(/\s+/g, " ").toLowerCase();
 
+export const getTaskStampIcon = (
+  task?: FocusTask | { name?: string; icon?: string } | string | null,
+): string => {
+  if (!task) return "🎯";
+  if (typeof task === "object" && task.icon) return task.icon;
+
+  const rawName = typeof task === "string" ? task : task.name || "";
+  const name = rawName.toLowerCase().trim();
+
+  // Gym / Workout / Fitness / Weightlifting
+  if (
+    /\b(gym|workout|lift|lifting|fitness|iron|strength|weights|exercise|bodybuilding|crossfit|pull|push|legs|arms|chest|squat|bench|deadlift)\b/i.test(
+      name,
+    )
+  ) {
+    return "🏋️";
+  }
+
+  // Running / Cardio
+  if (
+    /\b(run|running|cardio|jog|jogging|walk|walking|treadmill|cycle|cycling|bike|marathon|swim|swimming|hiit)\b/i.test(
+      name,
+    )
+  ) {
+    return "🏃";
+  }
+
+  // Coding / Tech / Engineering
+  if (
+    /\b(code|coding|dev|developer|programming|program|software|build|tech|script|debug|frontend|backend|fullstack|react|rust|python|typescript|ts|js|web|app)\b/i.test(
+      name,
+    )
+  ) {
+    return "💻";
+  }
+
+  // Trading / Finance / Markets
+  if (
+    /\b(trade|trading|trader|stocks|stock|crypto|bitcoin|btc|eth|market|finance|invest|investing|money|forex|pnl)\b/i.test(
+      name,
+    )
+  ) {
+    return "📈";
+  }
+
+  // Reading / Study / Education
+  if (
+    /\b(read|reading|book|books|study|studying|learn|learning|research|docs|paper|course|lecture|exam)\b/i.test(
+      name,
+    )
+  ) {
+    return "📚";
+  }
+
+  // Writing / Notes / Content
+  if (
+    /\b(write|writing|blog|writer|article|newsletter|draft|author|notes|journal|copy|copywriting|essay)\b/i.test(
+      name,
+    )
+  ) {
+    return "✍️";
+  }
+
+  // Meditation / Mindfulness / Wellness
+  if (
+    /\b(meditate|meditation|mind|zen|yoga|breathe|breathwork|health|wellness|relax|peace)\b/i.test(
+      name,
+    )
+  ) {
+    return "🧘";
+  }
+
+  // Design / UI / Creative / Art
+  if (
+    /\b(design|ui|ux|art|draw|drawing|creative|figma|paint|illustration|graphics)\b/i.test(
+      name,
+    )
+  ) {
+    return "🎨";
+  }
+
+  // Music / Audio
+  if (
+    /\b(music|audio|guitar|piano|song|sound|produce|beats|sing|melody)\b/i.test(
+      name,
+    )
+  ) {
+    return "🎵";
+  }
+
+  // Languages / Communication
+  if (
+    /\b(language|languages|spanish|french|german|japanese|vocab|speak|speaking|talk)\b/i.test(
+      name,
+    )
+  ) {
+    return "🗣️";
+  }
+
+  // Deep work / Focus / Productivity
+  if (
+    /\b(deep|focus|flow|sprint|plan|planning|work|task|project|strategy)\b/i.test(
+      name,
+    )
+  ) {
+    return "⚡";
+  }
+
+  // Rest / Sleep
+  if (/\b(sleep|nap|rest|recovery)\b/i.test(name)) {
+    return "🌙";
+  }
+
+  return "🎯";
+};
+
 export const canonicalizeData = (raw?: Partial<LedgerData> | null): LedgerData => {
   const sourceTasks: FocusTask[] = raw?.tasks?.length ? raw.tasks : starterTasks;
   const tasksByName = new Map<string, FocusTask>();
@@ -42,6 +158,7 @@ export const canonicalizeData = (raw?: Partial<LedgerData> | null): LedgerData =
       name,
       targetMinutes: Number(task.targetMinutes) || 30,
       color: task.color || "#ccff00",
+      icon: task.icon || getTaskStampIcon(name),
     };
 
     tasksByName.set(nameKey, canonicalTask);

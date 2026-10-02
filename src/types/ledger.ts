@@ -3,6 +3,7 @@ export interface FocusTask {
   name: string;
   targetMinutes: number;
   color: string;
+  icon?: string;
 }
 
 export interface FocusSession {

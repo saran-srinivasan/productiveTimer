@@ -89,12 +89,14 @@ function CommandAllView() {
       />
 
       <CalendarSection
+        addDirectSession={manualSession.addDirectSession}
         addManualSession={manualSession.addManualSession}
         calendarTask={calendarTask}
         calendarTaskId={calendarTaskId}
         calendar={calendar}
         changeMonth={changeMonth}
         completionDialogDate={completionDialogDate}
+        deleteSession={taskActions.deleteSession}
         deleteWorkout={workoutActions.deleteWorkout}
         manualSession={manualSession}
         markCompletion={completionActions.markCompletion}
@@ -105,6 +107,7 @@ function CommandAllView() {
         selectedSessions={selectedSessions}
         selectedTaskTotals={selectedTaskTotals}
         selectedWorkouts={selectedWorkouts}
+        sessions={data.sessions}
         setCalendarTaskId={setCalendarTaskId}
         setCompletionDialogDate={setCompletionDialogDate}
         setMonthDate={setMonthDate}
@@ -195,17 +198,20 @@ function CalendarView() {
     setSelectedDate,
     stats,
     data,
+    taskActions,
     workoutStats,
   } = useLedgerContext();
 
   return (
     <CalendarSection
+      addDirectSession={manualSession.addDirectSession}
       addManualSession={manualSession.addManualSession}
       calendarTask={calendarTask}
       calendarTaskId={calendarTaskId}
       calendar={calendar}
       changeMonth={changeMonth}
       completionDialogDate={completionDialogDate}
+      deleteSession={taskActions.deleteSession}
       deleteWorkout={workoutActions.deleteWorkout}
       manualSession={manualSession}
       markCompletion={completionActions.markCompletion}
@@ -216,6 +222,7 @@ function CalendarView() {
       selectedSessions={selectedSessions}
       selectedTaskTotals={selectedTaskTotals}
       selectedWorkouts={selectedWorkouts}
+      sessions={data.sessions}
       setCalendarTaskId={setCalendarTaskId}
       setCompletionDialogDate={setCompletionDialogDate}
       setMonthDate={setMonthDate}

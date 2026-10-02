@@ -3,9 +3,9 @@ import { FocusTask, WorkoutKind } from "./types/ledger";
 export const STORAGE_KEY = "focus-ledger-v1";
 
 export const starterTasks: FocusTask[] = [
-  { id: "task-gym", name: "Gym", targetMinutes: 45, color: "#ff5722" },
-  { id: "task-code", name: "Code", targetMinutes: 120, color: "#ccff00" },
-  { id: "task-trade", name: "Trade", targetMinutes: 60, color: "#00e5ff" },
+  { id: "task-gym", name: "Gym", targetMinutes: 45, color: "#ff5722", icon: "🏋️" },
+  { id: "task-code", name: "Code", targetMinutes: 120, color: "#ccff00", icon: "💻" },
+  { id: "task-trade", name: "Trade", targetMinutes: 60, color: "#00e5ff", icon: "📈" },
 ];
 
 export const workoutPresets: Record<WorkoutKind, string[]> = {
