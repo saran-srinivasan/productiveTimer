@@ -65,7 +65,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .and_then(|p| p.parse().ok())
         .unwrap_or(3001);
 
-    let addr = SocketAddr::from(([127, 0, 0, 1], port));
+    let host = env::var("HOST").unwrap_or_else(|_| "0.0.0.0".to_string());
+    let ip = host.parse::<std::net::IpAddr>().unwrap_or(std::net::IpAddr::V4(std::net::Ipv4Addr::new(0, 0, 0, 0)));
+    let addr = SocketAddr::from((ip, port));
     tracing::info!("ProductiveTimer backend running at http://{}", addr);
 
     let listener = tokio::net::TcpListener::bind(addr).await?;

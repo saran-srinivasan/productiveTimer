@@ -8,19 +8,19 @@ COPY index.html ./
 RUN npm run build
 
 # Stage 2: Build Rust Backend
-FROM rust:1.80-slim-bullseye AS backend-builder
+FROM rust:1-slim-bookworm AS backend-builder
 WORKDIR /app
 RUN apt-get update && apt-get install -y pkg-config libssl-dev && rm -rf /var/lib/apt/lists/*
 COPY backend/Cargo.toml backend/Cargo.lock* ./backend/
 RUN mkdir -p backend/src && echo "fn main() {}" > backend/src/main.rs
-RUN cd backend && cargo build --release || true
+RUN cd backend && cargo build --release -j 1 || true
 COPY backend/src ./backend/src
-RUN cd backend && cargo build --release
+RUN touch backend/src/main.rs && cd backend && cargo build --release -j 1
 
 # Stage 3: Runtime
-FROM debian:bullseye-slim
+FROM debian:bookworm-slim
 WORKDIR /app
-RUN apt-get update && apt-get install -y ca-certificates && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y ca-certificates libssl3 && rm -rf /var/lib/apt/lists/*
 COPY --from=backend-builder /app/backend/target/release/productive-timer-backend /app/server
 COPY --from=frontend-builder /app/dist /app/dist
 RUN mkdir -p /app/data
