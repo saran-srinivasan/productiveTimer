@@ -1,0 +1,15 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: productive-timer
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:3001:3001"
+    volumes:
+      - ./data:/app/data
+    environment:
+      - PORT=3001
+      - DATABASE_URL=sqlite:///app/data/productive_timer.db
+      - RUST_LOG=productive_timer_backend=info,tower_http=info
