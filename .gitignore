@@ -46,3 +46,11 @@ next-env.d.ts
 .antigravity
 
 dist
+
+# rust backend & sqlite
+/backend/target/
+/data/
+/backend/data/
+*.db
+*.db-wal
+*.db-shm

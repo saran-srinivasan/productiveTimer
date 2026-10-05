@@ -1,5 +1,5 @@
 import { useState, Dispatch, SetStateAction, FormEvent } from "react";
-import { isSupabaseConfigured, supabase } from "../supabaseClient";
+import { deleteTaskApi, deleteSessionApi } from "../apiClient";
 import { todayKey } from "../utils/date";
 import { getTaskStampIcon, normalizeTaskName, safeId } from "../utils/ledger";
 import { playTacticalSound } from "../utils/sound";
@@ -151,16 +151,10 @@ export const useTaskActions = ({
       active: current.active?.taskId === taskId ? null : current.active,
     }));
 
-    const client = supabase;
-    if (isSupabaseConfigured && client) {
-      client
-        .from("focus_tasks")
-        .delete()
-        .eq("id", taskId)
-        .then(({ error }) => {
-          if (error) setSyncState("Cloud error");
-        });
-    }
+    deleteTaskApi(taskId).catch((err) => {
+      console.error("Failed to delete task on backend:", err);
+      setSyncState("Cloud error");
+    });
   };
 
   const deleteSession = (sessionId: string) => {
@@ -171,16 +165,10 @@ export const useTaskActions = ({
       sessions: current.sessions.filter((session) => session.id !== sessionId),
     }));
 
-    const client = supabase;
-    if (isSupabaseConfigured && client) {
-      client
-        .from("focus_sessions")
-        .delete()
-        .eq("id", sessionId)
-        .then(({ error }) => {
-          if (error) setSyncState("Cloud error");
-        });
-    }
+    deleteSessionApi(sessionId).catch((err) => {
+      console.error("Failed to delete session on backend:", err);
+      setSyncState("Cloud error");
+    });
   };
 
   return {

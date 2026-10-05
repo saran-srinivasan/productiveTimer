@@ -1,6 +1,6 @@
 import { useEffect, useState, Dispatch, SetStateAction, FormEvent } from "react";
 import { workoutPresets } from "../constants";
-import { isSupabaseConfigured, supabase } from "../supabaseClient";
+import { deleteWorkoutApi } from "../apiClient";
 import { todayKey } from "../utils/date";
 import { safeId } from "../utils/ledger";
 import { playTacticalSound } from "../utils/sound";
@@ -94,16 +94,10 @@ export const useWorkoutForm = ({
       workouts: current.workouts.filter((workout) => workout.id !== workoutId),
     }));
 
-    const client = supabase;
-    if (isSupabaseConfigured && client) {
-      client
-        .from("workout_entries")
-        .delete()
-        .eq("id", workoutId)
-        .then(({ error }) => {
-          if (error) setSyncState("Cloud error");
-        });
-    }
+    deleteWorkoutApi(workoutId).catch((err) => {
+      console.error("Failed to delete workout on backend:", err);
+      setSyncState("Cloud error");
+    });
   };
 
   // Quick steppers

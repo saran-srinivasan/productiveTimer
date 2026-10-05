@@ -1,5 +1,5 @@
 import { Dispatch, SetStateAction } from "react";
-import { isSupabaseConfigured, supabase } from "../supabaseClient";
+import { deleteCompletionApi } from "../apiClient";
 import { safeId } from "../utils/ledger";
 import { playTacticalSound } from "../utils/sound";
 import { LedgerData, SyncState } from "../types/ledger";
@@ -56,17 +56,10 @@ export const useCompletionActions = ({
       ),
     }));
 
-    const client = supabase;
-    if (isSupabaseConfigured && client) {
-      client
-        .from("task_completions")
-        .delete()
-        .eq("task_id", taskId)
-        .eq("completion_date", date)
-        .then(({ error }) => {
-          if (error) setSyncState("Cloud error");
-        });
-    }
+    deleteCompletionApi(taskId, date).catch((err) => {
+      console.error("Failed to delete completion on backend:", err);
+      setSyncState("Cloud error");
+    });
   };
 
   return { markCompletion, removeCompletion };
