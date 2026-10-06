@@ -96,6 +96,22 @@ pub async fn run_migrations(pool: &DbPool) -> Result<(), sqlx::Error> {
 
         CREATE INDEX IF NOT EXISTS task_completions_task_id_idx
             ON task_completions (task_id);
+
+        CREATE TABLE IF NOT EXISTS auth_config (
+            id TEXT PRIMARY KEY NOT NULL DEFAULT 'primary',
+            password_hash TEXT NOT NULL,
+            created_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+
+        CREATE TABLE IF NOT EXISTS auth_sessions (
+            token TEXT PRIMARY KEY NOT NULL,
+            role TEXT NOT NULL DEFAULT 'owner',
+            created_at TEXT NOT NULL DEFAULT (datetime('now')),
+            expires_at TEXT NOT NULL
+        );
+
+        CREATE INDEX IF NOT EXISTS auth_sessions_token_idx
+            ON auth_sessions (token);
         "#,
     )
     .execute(pool)

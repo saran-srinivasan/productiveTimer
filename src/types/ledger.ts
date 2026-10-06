@@ -61,7 +61,8 @@ export type SyncState =
   | "Saving"
   | "Cloud synced"
   | "Cloud error"
-  | "Local only";
+  | "Local only"
+  | "Guest Sandbox";
 
 export interface FocusStats {
   totalsByTask: Map<string, number>;

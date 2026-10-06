@@ -1,14 +1,16 @@
 use axum::{
     extract::{Path, Query, State},
-    http::StatusCode,
+    http::{header, HeaderMap, StatusCode},
     response::IntoResponse,
     Json,
 };
 use serde_json::json;
 use std::env;
 
+use crate::auth::{self, AuthenticatedOwner};
 use crate::db::DbPool;
 use crate::models::{
+    AuthLoginRequest, AuthSetupRequest, AuthStatusResponse, AuthSuccessResponse,
     DeleteCompletionQuery, FocusSession, FocusTask, LedgerResponse, MigrateSupabaseRequest,
     SyncRequest, TaskCompletion, WorkoutEntry,
 };
@@ -17,7 +19,138 @@ pub async fn health_check() -> impl IntoResponse {
     (StatusCode::OK, Json(json!({ "status": "ok" })))
 }
 
-pub async fn get_ledger(State(pool): State<DbPool>) -> Result<Json<LedgerResponse>, (StatusCode, String)> {
+pub async fn auth_status(
+    State(pool): State<DbPool>,
+    headers: HeaderMap,
+) -> Result<Json<AuthStatusResponse>, (StatusCode, String)> {
+    let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM auth_config")
+        .fetch_one(&pool)
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("DB query failed: {}", e)))?;
+
+    let is_setup = count > 0;
+
+    let mut authenticated = false;
+    let auth_header = headers.get(header::AUTHORIZATION).and_then(|v| v.to_str().ok());
+    if let Some(h) = auth_header {
+        if h.starts_with("Bearer ") {
+            let token = h.trim_start_matches("Bearer ").trim();
+            if auth::check_token_valid(&pool, token).await {
+                authenticated = true;
+            }
+        }
+    }
+
+    let role = if authenticated {
+        "owner".to_string()
+    } else {
+        "guest".to_string()
+    };
+
+    Ok(Json(AuthStatusResponse {
+        is_setup,
+        authenticated,
+        role,
+    }))
+}
+
+pub async fn auth_setup(
+    State(pool): State<DbPool>,
+    Json(payload): Json<AuthSetupRequest>,
+) -> Result<Json<AuthSuccessResponse>, (StatusCode, String)> {
+    let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM auth_config")
+        .fetch_one(&pool)
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("DB query failed: {}", e)))?;
+
+    if count > 0 {
+        return Err((StatusCode::BAD_REQUEST, "Master password is already established.".to_string()));
+    }
+
+    let trimmed = payload.password.trim();
+    if trimmed.len() < 4 {
+        return Err((StatusCode::BAD_REQUEST, "Password must be at least 4 characters long.".to_string()));
+    }
+
+    let password_hash = auth::hash_password(trimmed)
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e))?;
+
+    sqlx::query("INSERT INTO auth_config (id, password_hash) VALUES ('primary', ?1)")
+        .bind(&password_hash)
+        .execute(&pool)
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to save master password: {}", e)))?;
+
+    let token = auth::generate_session_token();
+    let expires_at = auth::default_expiry_str();
+
+    sqlx::query("INSERT INTO auth_sessions (token, role, expires_at) VALUES (?1, 'owner', ?2)")
+        .bind(&token)
+        .bind(&expires_at)
+        .execute(&pool)
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to create session: {}", e)))?;
+
+    Ok(Json(AuthSuccessResponse {
+        token,
+        role: "owner".to_string(),
+    }))
+}
+
+pub async fn auth_login(
+    State(pool): State<DbPool>,
+    Json(payload): Json<AuthLoginRequest>,
+) -> Result<Json<AuthSuccessResponse>, (StatusCode, String)> {
+    let hash: Option<String> = sqlx::query_scalar("SELECT password_hash FROM auth_config WHERE id = 'primary'")
+        .fetch_optional(&pool)
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("DB error: {}", e)))?;
+
+    let hash = match hash {
+        Some(h) => h,
+        None => return Err((StatusCode::BAD_REQUEST, "No master password configured yet. Complete setup first.".to_string())),
+    };
+
+    if !auth::verify_password(&payload.password, &hash) {
+        return Err((StatusCode::UNAUTHORIZED, "Invalid master password.".to_string()));
+    }
+
+    let token = auth::generate_session_token();
+    let expires_at = auth::default_expiry_str();
+
+    sqlx::query("INSERT INTO auth_sessions (token, role, expires_at) VALUES (?1, 'owner', ?2)")
+        .bind(&token)
+        .bind(&expires_at)
+        .execute(&pool)
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to create session: {}", e)))?;
+
+    Ok(Json(AuthSuccessResponse {
+        token,
+        role: "owner".to_string(),
+    }))
+}
+
+pub async fn auth_logout(
+    State(pool): State<DbPool>,
+    headers: HeaderMap,
+) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
+    if let Some(h) = headers.get(header::AUTHORIZATION).and_then(|v| v.to_str().ok()) {
+        if h.starts_with("Bearer ") {
+            let token = h.trim_start_matches("Bearer ").trim();
+            let _ = sqlx::query("DELETE FROM auth_sessions WHERE token = ?1")
+                .bind(token)
+                .execute(&pool)
+                .await;
+        }
+    }
+    Ok(Json(json!({ "status": "logged_out" })))
+}
+
+pub async fn get_ledger(
+    _auth: AuthenticatedOwner,
+    State(pool): State<DbPool>,
+) -> Result<Json<LedgerResponse>, (StatusCode, String)> {
     let tasks = sqlx::query_as::<_, FocusTask>(
         "SELECT id, name, target_minutes, color, created_at FROM focus_tasks ORDER BY created_at ASC",
     )
@@ -55,6 +188,7 @@ pub async fn get_ledger(State(pool): State<DbPool>) -> Result<Json<LedgerRespons
 }
 
 pub async fn sync_ledger(
+    _auth: AuthenticatedOwner,
     State(pool): State<DbPool>,
     Json(payload): Json<SyncRequest>,
 ) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
@@ -181,6 +315,7 @@ pub async fn sync_ledger(
 }
 
 pub async fn delete_task(
+    _auth: AuthenticatedOwner,
     State(pool): State<DbPool>,
     Path(id): Path<String>,
 ) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
@@ -194,6 +329,7 @@ pub async fn delete_task(
 }
 
 pub async fn delete_session(
+    _auth: AuthenticatedOwner,
     State(pool): State<DbPool>,
     Path(id): Path<String>,
 ) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
@@ -207,6 +343,7 @@ pub async fn delete_session(
 }
 
 pub async fn delete_workout(
+    _auth: AuthenticatedOwner,
     State(pool): State<DbPool>,
     Path(id): Path<String>,
 ) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
@@ -220,6 +357,7 @@ pub async fn delete_workout(
 }
 
 pub async fn delete_completion(
+    _auth: AuthenticatedOwner,
     State(pool): State<DbPool>,
     Query(params): Query<DeleteCompletionQuery>,
 ) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
@@ -234,6 +372,7 @@ pub async fn delete_completion(
 }
 
 pub async fn migrate_from_supabase(
+    _auth: AuthenticatedOwner,
     State(pool): State<DbPool>,
     Json(payload): Json<MigrateSupabaseRequest>,
 ) -> Result<Json<serde_json::Value>, (StatusCode, String)> {

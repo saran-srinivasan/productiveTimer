@@ -1,3 +1,4 @@
+mod auth;
 mod db;
 mod handlers;
 mod models;
@@ -48,6 +49,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // API Router
     let app = Router::new()
         .route("/api/health", get(handlers::health_check))
+        .route("/api/auth/status", get(handlers::auth_status))
+        .route("/api/auth/setup", post(handlers::auth_setup))
+        .route("/api/auth/login", post(handlers::auth_login))
+        .route("/api/auth/logout", post(handlers::auth_logout))
         .route("/api/ledger", get(handlers::get_ledger))
         .route("/api/sync", post(handlers::sync_ledger))
         .route("/api/tasks/:id", delete(handlers::delete_task))

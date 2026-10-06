@@ -78,6 +78,97 @@ export const fromCompletionRow = (row: any): TaskCompletion => ({
   createdAt: row.created_at,
 });
 
+const TOKEN_KEY = "productive_timer_auth_token";
+
+export const getAuthToken = (): string | null => {
+  try {
+    return localStorage.getItem(TOKEN_KEY);
+  } catch {
+    return null;
+  }
+};
+
+export const setAuthToken = (token: string | null): void => {
+  try {
+    if (token) {
+      localStorage.setItem(TOKEN_KEY, token);
+    } else {
+      localStorage.removeItem(TOKEN_KEY);
+    }
+  } catch {
+    // ignore
+  }
+};
+
+export const getAuthHeaders = (customToken?: string | null): Record<string, string> => {
+  const token = customToken !== undefined ? customToken : getAuthToken();
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+  };
+  if (token) {
+    headers["Authorization"] = `Bearer ${token}`;
+  }
+  return headers;
+};
+
+export interface AuthStatusResponse {
+  is_setup: boolean;
+  authenticated: boolean;
+  role: "owner" | "guest";
+}
+
+export interface AuthSuccessResponse {
+  token: string;
+  role: string;
+}
+
+export const checkAuthStatusApi = async (token?: string | null): Promise<AuthStatusResponse> => {
+  const res = await fetch(`${API_BASE}/auth/status`, {
+    headers: getAuthHeaders(token),
+  });
+  if (!res.ok) {
+    throw new Error(`Auth status check failed: ${res.status}`);
+  }
+  return res.json();
+};
+
+export const setupMasterPasswordApi = async (password: string): Promise<AuthSuccessResponse> => {
+  const res = await fetch(`${API_BASE}/auth/setup`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ password }),
+  });
+  if (!res.ok) {
+    const errorText = await res.text();
+    throw new Error(errorText || `Setup failed: ${res.status}`);
+  }
+  return res.json();
+};
+
+export const loginMasterPasswordApi = async (password: string): Promise<AuthSuccessResponse> => {
+  const res = await fetch(`${API_BASE}/auth/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ password }),
+  });
+  if (!res.ok) {
+    const errorText = await res.text();
+    throw new Error(errorText || `Login failed: ${res.status}`);
+  }
+  return res.json();
+};
+
+export const logoutApi = async (token?: string | null): Promise<void> => {
+  try {
+    await fetch(`${API_BASE}/auth/logout`, {
+      method: "POST",
+      headers: getAuthHeaders(token),
+    });
+  } catch {
+    // Ignore error on logout
+  }
+};
+
 export interface RemoteLedgerData {
   tasks: FocusTask[];
   sessions: FocusSession[];
@@ -85,9 +176,9 @@ export interface RemoteLedgerData {
   completions: TaskCompletion[];
 }
 
-export const fetchLedger = async (): Promise<RemoteLedgerData> => {
+export const fetchLedger = async (token?: string | null): Promise<RemoteLedgerData> => {
   const res = await fetch(`${API_BASE}/ledger`, {
-    headers: { "Content-Type": "application/json" },
+    headers: getAuthHeaders(token),
   });
   if (!res.ok) {
     throw new Error(`Failed to fetch ledger: ${res.status} ${res.statusText}`);
@@ -101,12 +192,18 @@ export const fetchLedger = async (): Promise<RemoteLedgerData> => {
   };
 };
 
-export const syncLedger = async (data: {
-  tasks?: FocusTask[];
-  sessions?: FocusSession[];
-  workouts?: WorkoutEntry[];
-  completions?: TaskCompletion[];
-}): Promise<void> => {
+export const syncLedger = async (
+  data: {
+    tasks?: FocusTask[];
+    sessions?: FocusSession[];
+    workouts?: WorkoutEntry[];
+    completions?: TaskCompletion[];
+  },
+  token?: string | null,
+): Promise<void> => {
+  const effectiveToken = token !== undefined ? token : getAuthToken();
+  if (!effectiveToken) return;
+
   const payload = {
     tasks: data.tasks ? data.tasks.map(toTaskRow) : undefined,
     sessions: data.sessions ? data.sessions.map(toSessionRow) : undefined,
@@ -116,7 +213,7 @@ export const syncLedger = async (data: {
 
   const res = await fetch(`${API_BASE}/sync`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: getAuthHeaders(effectiveToken),
     body: JSON.stringify(payload),
   });
 
@@ -125,37 +222,53 @@ export const syncLedger = async (data: {
   }
 };
 
-export const deleteTaskApi = async (taskId: string): Promise<void> => {
+export const deleteTaskApi = async (taskId: string, token?: string | null): Promise<void> => {
+  const effectiveToken = token !== undefined ? token : getAuthToken();
+  if (!effectiveToken) return;
+
   const res = await fetch(`${API_BASE}/tasks/${encodeURIComponent(taskId)}`, {
     method: "DELETE",
+    headers: getAuthHeaders(effectiveToken),
   });
   if (!res.ok) {
     throw new Error(`Delete task failed: ${res.status}`);
   }
 };
 
-export const deleteSessionApi = async (sessionId: string): Promise<void> => {
+export const deleteSessionApi = async (sessionId: string, token?: string | null): Promise<void> => {
+  const effectiveToken = token !== undefined ? token : getAuthToken();
+  if (!effectiveToken) return;
+
   const res = await fetch(`${API_BASE}/sessions/${encodeURIComponent(sessionId)}`, {
     method: "DELETE",
+    headers: getAuthHeaders(effectiveToken),
   });
   if (!res.ok) {
     throw new Error(`Delete session failed: ${res.status}`);
   }
 };
 
-export const deleteWorkoutApi = async (workoutId: string): Promise<void> => {
+export const deleteWorkoutApi = async (workoutId: string, token?: string | null): Promise<void> => {
+  const effectiveToken = token !== undefined ? token : getAuthToken();
+  if (!effectiveToken) return;
+
   const res = await fetch(`${API_BASE}/workouts/${encodeURIComponent(workoutId)}`, {
     method: "DELETE",
+    headers: getAuthHeaders(effectiveToken),
   });
   if (!res.ok) {
     throw new Error(`Delete workout failed: ${res.status}`);
   }
 };
 
-export const deleteCompletionApi = async (taskId: string, date: string): Promise<void> => {
+export const deleteCompletionApi = async (taskId: string, date: string, token?: string | null): Promise<void> => {
+  const effectiveToken = token !== undefined ? token : getAuthToken();
+  if (!effectiveToken) return;
+
   const params = new URLSearchParams({ task_id: taskId, date });
   const res = await fetch(`${API_BASE}/completions?${params.toString()}`, {
     method: "DELETE",
+    headers: getAuthHeaders(effectiveToken),
   });
   if (!res.ok) {
     throw new Error(`Delete completion failed: ${res.status}`);
@@ -174,10 +287,11 @@ export const checkBackendHealth = async (): Promise<boolean> => {
 export const migrateFromSupabaseApi = async (
   supabaseUrl?: string,
   supabaseAnonKey?: string,
+  token?: string | null,
 ): Promise<{ status: string; migrated: { tasks: number; sessions: number; workouts: number; completions: number } }> => {
   const res = await fetch(`${API_BASE}/migrate-from-supabase`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: getAuthHeaders(token),
     body: JSON.stringify({
       supabase_url: supabaseUrl,
       supabase_anon_key: supabaseAnonKey,
@@ -189,3 +303,4 @@ export const migrateFromSupabaseApi = async (
   }
   return res.json();
 };
+

@@ -320,6 +320,15 @@ button:disabled, textarea:disabled, input:disabled, select:disabled {
   box-shadow: 0 0 8px var(--stamp-crimson);
 }
 
+.sync-pill[data-state="Guest Sandbox"] {
+  border-color: rgba(0, 229, 255, 0.4);
+  color: var(--chrono-cyan);
+}
+.sync-pill[data-state="Guest Sandbox"] .sync-dot {
+  background: var(--chrono-cyan);
+  box-shadow: 0 0 8px var(--chrono-cyan);
+}
+
 @keyframes hardware-blink {
   to { visibility: hidden; }
 }
@@ -2316,3 +2325,271 @@ input[type="color"] {
     font-size: 1.4rem;
   }
 }
+
+/* ==========================================================================
+   AUTH & GUEST SANDBOX SYSTEM
+   ========================================================================== */
+
+/* Guest Notice Banner */
+.guest-notice-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 18px;
+  background: rgba(0, 229, 255, 0.08);
+  border-bottom: 1px solid rgba(0, 229, 255, 0.25);
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  color: var(--chrono-cyan);
+}
+
+.guest-notice-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.guest-notice-login-link {
+  background: rgba(0, 229, 255, 0.15);
+  border: 1px solid rgba(0, 229, 255, 0.4);
+  color: var(--ink-pure);
+  padding: 4px 10px;
+  border-radius: var(--radius-xs);
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.guest-notice-login-link:hover {
+  background: var(--chrono-cyan);
+  color: var(--chassis-base);
+  box-shadow: 0 0 10px var(--chrono-cyan-glow);
+}
+
+/* Role Pills */
+.role-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  border-radius: var(--radius-xs);
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  background: var(--panel-recessed);
+}
+
+.role-pill .role-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+}
+
+.role-pill.owner-role {
+  border: 1px solid rgba(204, 255, 0, 0.4);
+  color: var(--volt-lime);
+}
+
+.role-pill.owner-role .role-dot {
+  background: var(--volt-lime);
+  box-shadow: 0 0 8px var(--volt-lime);
+}
+
+.role-pill.guest-role {
+  border: 1px solid rgba(0, 229, 255, 0.35);
+  color: var(--chrono-cyan);
+}
+
+.role-pill.guest-role .role-dot {
+  background: var(--chrono-cyan);
+  box-shadow: 0 0 8px var(--chrono-cyan);
+}
+
+.guest-login-header-btn {
+  background: rgba(204, 255, 0, 0.12);
+  border: 1px solid var(--volt-lime);
+  color: var(--volt-lime);
+  padding: 6px 12px;
+  border-radius: var(--radius-xs);
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.guest-login-header-btn:hover {
+  background: var(--volt-lime);
+  color: #000;
+  box-shadow: 0 0 12px var(--volt-glow);
+}
+
+.logout-button:hover {
+  border-color: var(--stamp-crimson) !important;
+  color: var(--stamp-crimson) !important;
+}
+
+/* Auth Dialog */
+.auth-dialog-card {
+  width: min(100%, 460px);
+  padding: 28px;
+  background: var(--panel-module);
+  border: 2px solid var(--milled-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-bevel), 0 20px 50px rgba(0, 0, 0, 0.8);
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  animation: dialog-enter 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.auth-dialog-header {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--milled-border);
+}
+
+.auth-badge-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.auth-mode-badge {
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  padding: 3px 8px;
+  border-radius: var(--radius-xs);
+  text-transform: uppercase;
+}
+
+.auth-mode-badge.badge-setup {
+  background: rgba(204, 255, 0, 0.15);
+  border: 1px solid var(--volt-lime);
+  color: var(--volt-lime);
+}
+
+.auth-mode-badge.badge-login {
+  background: rgba(0, 229, 255, 0.15);
+  border: 1px solid var(--chrono-cyan);
+  color: var(--chrono-cyan);
+}
+
+.auth-dialog-title {
+  font-size: 1.35rem;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  color: var(--ink-pure);
+  margin-top: 4px;
+}
+
+.auth-dialog-subtitle {
+  font-size: 0.84rem;
+  color: var(--ink-secondary);
+  line-height: 1.45;
+}
+
+.auth-error-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  background: rgba(255, 23, 68, 0.12);
+  border-left: 3px solid var(--stamp-crimson);
+  border-radius: var(--radius-xs);
+  color: var(--stamp-crimson);
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+}
+
+.auth-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.auth-field-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.auth-field-label {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--ink-secondary);
+}
+
+.auth-input {
+  background: var(--panel-recessed);
+  border: 1px solid var(--milled-border);
+  border-radius: var(--radius-xs);
+  padding: 10px 14px;
+  color: var(--ink-pure);
+  font-family: var(--font-mono);
+  font-size: 0.95rem;
+  outline: none;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.auth-input:focus {
+  border-color: var(--volt-lime);
+  box-shadow: 0 0 10px var(--volt-glow);
+}
+
+.auth-dialog-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 6px;
+}
+
+.auth-submit-btn {
+  width: 100%;
+  padding: 12px;
+  font-family: var(--font-mono);
+  font-size: 0.88rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  background: var(--volt-lime);
+  color: #000;
+  border-radius: var(--radius-xs);
+  transition: all 0.15s ease;
+}
+
+.auth-submit-btn:hover:not(:disabled) {
+  box-shadow: 0 0 16px var(--volt-glow);
+  transform: translateY(-1px);
+}
+
+.auth-guest-btn {
+  width: 100%;
+  padding: 10px;
+  font-family: var(--font-mono);
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--ink-secondary);
+  border: 1px solid var(--milled-border);
+  border-radius: var(--radius-xs);
+  transition: all 0.15s ease;
+}
+
+.auth-guest-btn:hover:not(:disabled) {
+  color: var(--ink-pure);
+  background: var(--panel-elevated);
+  border-color: var(--ink-muted);
+}
+

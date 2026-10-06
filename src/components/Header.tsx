@@ -3,6 +3,7 @@ import { Link, useRouterState } from "@tanstack/react-router";
 import { formatDuration, formatLoad } from "../utils/format";
 import { exportLedgerJSON } from "../utils/ledger";
 import { useLedgerContext } from "../context/LedgerContext";
+import { useAuth } from "../context/AuthContext";
 
 export function Header() {
   const {
@@ -14,6 +15,13 @@ export function Header() {
     data,
     setData,
   } = useLedgerContext();
+
+  const {
+    role,
+    openAuthModal,
+    logout,
+    resetGuestSandbox,
+  } = useAuth();
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const routerState = useRouterState();
@@ -47,6 +55,24 @@ export function Header() {
 
   return (
     <header className="command-strip">
+      {role === "guest" && (
+        <div className="guest-notice-banner">
+          <div className="guest-notice-left">
+            <span className="guest-notice-pulse">🧪</span>
+            <span>
+              <strong>GUEST SANDBOX:</strong> Exploring with demo data. Changes stay local to your browser.
+            </span>
+          </div>
+          <button
+            type="button"
+            className="guest-notice-login-link"
+            onClick={() => openAuthModal("login")}
+          >
+            🔐 Owner Sign In →
+          </button>
+        </div>
+      )}
+
       <div className="header-top">
         <div className="brand-block">
           <div className="brand-icon">
@@ -103,6 +129,26 @@ export function Header() {
             <span>{syncState}</span>
           </div>
 
+          {/* Role Status Badge */}
+          {role === "owner" ? (
+            <div
+              className="role-pill owner-role"
+              title="Authenticated as Owner — Cloud synchronization active"
+            >
+              <span className="role-dot" />
+              <span>OWNER</span>
+            </div>
+          ) : (
+            <div
+              className="role-pill guest-role"
+              title="Guest Sandbox — Testing locally with sample data"
+            >
+              <span className="role-dot" />
+              <span>GUEST</span>
+            </div>
+          )}
+
+          {/* Audio toggle */}
           <button
             type="button"
             className="icon-button"
@@ -117,6 +163,7 @@ export function Header() {
             {soundEnabled ? "🔊" : "🔇"}
           </button>
 
+          {/* Export JSON */}
           <button
             type="button"
             className="icon-button"
@@ -138,6 +185,7 @@ export function Header() {
             </svg>
           </button>
 
+          {/* Import JSON */}
           <button
             type="button"
             className="icon-button"
@@ -165,6 +213,41 @@ export function Header() {
             accept=".json"
             style={{ display: "none" }}
           />
+
+          {/* Guest Reset Demo Data button */}
+          {role === "guest" && (
+            <button
+              type="button"
+              className="icon-button"
+              onClick={resetGuestSandbox}
+              title="Reset Sandbox to Fresh Sample Data"
+              style={{ width: "34px", height: "34px" }}
+            >
+              🔄
+            </button>
+          )}
+
+          {/* Auth Login / Logout actions */}
+          {role === "owner" ? (
+            <button
+              type="button"
+              className="icon-button logout-button"
+              onClick={logout}
+              title="Sign Out of Owner Mode"
+              style={{ width: "34px", height: "34px" }}
+            >
+              🚪
+            </button>
+          ) : (
+            <button
+              type="button"
+              className="guest-login-header-btn"
+              onClick={() => openAuthModal("login")}
+              title="Sign in as Owner to access personal cloud ledger"
+            >
+              🔐 Sign In
+            </button>
+          )}
         </div>
       </div>
 

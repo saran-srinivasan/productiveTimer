@@ -79,3 +79,26 @@ pub struct MigrateSupabaseRequest {
     pub supabase_url: Option<String>,
     pub supabase_anon_key: Option<String>,
 }
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct AuthStatusResponse {
+    pub is_setup: bool,
+    pub authenticated: bool,
+    pub role: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct AuthSetupRequest {
+    pub password: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct AuthLoginRequest {
+    pub password: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct AuthSuccessResponse {
+    pub token: String,
+    pub role: String,
+}
