@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite --host 127.0.0.1",
     "backend": "cargo run --manifest-path backend/Cargo.toml",
+    "dev:all": "npx --yes concurrently -k -n \"backend,frontend\" -c \"cyan,magenta\" \"cargo run --manifest-path backend/Cargo.toml\" \"npm run dev\"",
     "build": "tsc -b && vite build",
     "preview": "vite preview --host 127.0.0.1",
     "predeploy": "npm run build"
