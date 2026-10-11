@@ -1,6 +1,6 @@
 {
   "name": "productive-timer",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": false,
   "type": "module",
   "scripts": {
@@ -9,7 +9,10 @@
     "dev:all": "npx --yes concurrently -k -n \"backend,frontend\" -c \"cyan,magenta\" \"cargo run --manifest-path backend/Cargo.toml\" \"npm run dev\"",
     "build": "tsc -b && vite build",
     "preview": "vite preview --host 127.0.0.1",
-    "predeploy": "npm run build"
+    "predeploy": "npm run build",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:e2e": "playwright test"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.102.8",
@@ -21,5 +24,12 @@
     "react-dom": "^19.0.0",
     "typescript": "^7.0.2",
     "vite": "^7.0.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.64.0",
+    "@testing-library/jest-dom": "^7.0.1",
+    "@testing-library/react": "^16.3.3",
+    "happy-dom": "^20.14.6",
+    "vitest": "^5.0.3"
   }
 }

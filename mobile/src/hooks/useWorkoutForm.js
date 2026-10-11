@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import * as Crypto from "expo-crypto";
 import { workoutPresets } from "../constants";
-import { isSupabaseConfigured, supabase } from "../supabaseClient";
+import { deleteWorkoutApi } from "../apiClient";
 import { todayKey } from "../utils/date";
 
 export const useWorkoutForm = ({ setData, setSyncState }) => {
@@ -77,15 +77,10 @@ export const useWorkoutForm = ({ setData, setSyncState }) => {
       workouts: current.workouts.filter((workout) => workout.id !== workoutId),
     }));
 
-    if (isSupabaseConfigured) {
-      supabase
-        .from("workout_entries")
-        .delete()
-        .eq("id", workoutId)
-        .then(({ error }) => {
-          if (error) setSyncState("Cloud error");
-        });
-    }
+    deleteWorkoutApi(workoutId).catch((err) => {
+      console.warn("Delete workout error:", err);
+      if (setSyncState) setSyncState("Cloud error");
+    });
   };
 
   return {

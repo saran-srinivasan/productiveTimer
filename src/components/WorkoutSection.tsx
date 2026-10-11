@@ -1,4 +1,4 @@
-import React, { FormEvent, useState } from "react";
+import React, { FormEvent, useState, useEffect, useCallback } from "react";
 import { Link } from "@tanstack/react-router";
 import { intensityOptions, workoutPresets } from "../constants";
 import { formatClock, formatLoad } from "../utils/format";
@@ -7,9 +7,27 @@ import { WorkoutRoutineBuilder } from "./WorkoutRoutineBuilder";
 import { WorkoutEntry, WorkoutKind, WorkoutStats } from "../types/ledger";
 import { useWorkoutRoutine } from "../hooks/useWorkoutRoutine";
 import { useLedgerContext } from "../context/LedgerContext";
+import { BatchWorkoutEntryInput } from "../hooks/useWorkoutForm";
+import { LiveWorkoutStage } from "./fitness/LiveWorkoutStage";
+import { ExerciseProgressionCard } from "./fitness/ExerciseProgressionCard";
+import { ExerciseHistoryModal } from "./fitness/ExerciseHistoryModal";
+import { fetchAllPrsApi } from "../apiClient";
+import { PersonalRecordItemDto } from "../types/api";
+
+export interface SetDetail {
+  id: string;
+  setNumber: number;
+  weight: number;
+  reps: number;
+  completed: boolean;
+}
 
 interface WorkoutSectionProps {
   addWorkout: (e: FormEvent) => void;
+  addWorkoutEntries?: (
+    entries: BatchWorkoutEntryInput[],
+    date?: string,
+  ) => void;
   deleteWorkout: (id: string) => void;
   recentWorkouts: WorkoutEntry[];
   workoutForm: {
@@ -45,6 +63,7 @@ interface WorkoutSectionProps {
 
 export function WorkoutSection({
   addWorkout,
+  addWorkoutEntries,
   deleteWorkout,
   recentWorkouts,
   workoutForm,
@@ -53,6 +72,37 @@ export function WorkoutSection({
   const { soundEnabled } = useLedgerContext();
   const routine = useWorkoutRoutine(soundEnabled);
   const [showBuilder, setShowBuilder] = useState(false);
+
+  // Phase 4: Sub-navigation & PR Engine state
+  const [workoutSubTab, setWorkoutSubTab] = useState<"live" | "records" | "ledger">("live");
+  const [prs, setPrs] = useState<PersonalRecordItemDto[]>([]);
+  const [activeHistoryExercise, setActiveHistoryExercise] = useState<string | null>(null);
+
+  const loadPrs = useCallback(async () => {
+    try {
+      const res = await fetchAllPrsApi();
+      setPrs(res);
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  useEffect(() => {
+    loadPrs();
+  }, [loadPrs]);
+
+  // Strength Architecture Mode: "perSet" (varying weights per set) vs "uniform" (single weight for all sets)
+  const [strengthEntryMode, setStrengthEntryMode] = useState<"perSet" | "uniform">("perSet");
+
+  // Per-set breakdown state
+  const [setRows, setSetRows] = useState<SetDetail[]>([
+    { id: "set-1", setNumber: 1, weight: 40, reps: 10, completed: false },
+    { id: "set-2", setNumber: 2, weight: 40, reps: 10, completed: false },
+    { id: "set-3", setNumber: 3, weight: 40, reps: 10, completed: false },
+  ]);
+
+  const [activeSetIndex, setActiveSetIndex] = useState<number>(0);
+  const [loadedExerciseRestSec, setLoadedExerciseRestSec] = useState<number>(90);
 
   // In-session addition & swap states
   const [showInSessionAdd, setShowInSessionAdd] = useState(false);
@@ -73,8 +123,27 @@ export function WorkoutSection({
       (Number(workoutForm.workoutWeight) || 0)
     : 0;
 
-  // Handle auto-populating form when an exercise is selected from the active queue
-  const loadExerciseFromQueue = (name: string, targetSets: number, targetReps: string | number) => {
+  // Retrieve most recent weight used for this exercise from ledger history
+  const getLastWeightForExercise = (exerciseName: string): number => {
+    if (!exerciseName) return Number(workoutForm.workoutWeight) || 40;
+    const match = recentWorkouts.find(
+      (w) =>
+        w.kind === "strength" &&
+        w.exercise.trim().toLowerCase() === exerciseName.trim().toLowerCase() &&
+        w.weight != null &&
+        w.weight > 0,
+    );
+    return match && match.weight ? Number(match.weight) : Number(workoutForm.workoutWeight) || 40;
+  };
+
+  // Handle auto-populating form when an exercise is selected from the active queue or preworkout list
+  const loadExerciseFromQueue = (
+    name: string,
+    targetSets: number,
+    targetReps: string | number,
+    loggedSets = 0,
+    restSec = 90,
+  ) => {
     workoutForm.setWorkoutKind("strength");
     if (workoutPresets.strength.includes(name)) {
       workoutForm.setWorkoutExercise(name);
@@ -83,29 +152,226 @@ export function WorkoutSection({
       workoutForm.setWorkoutExercise("Custom");
       workoutForm.setCustomWorkoutExercise(name);
     }
-    workoutForm.setWorkoutSets(targetSets);
+    const numSets = Math.max(1, targetSets || 3);
+    workoutForm.setWorkoutSets(numSets);
 
     const parsedReps =
       typeof targetReps === "number"
         ? targetReps
-        : parseInt(String(targetReps).split("-")[0], 10) || 8;
+        : parseInt(String(targetReps).split("-")[0], 10) || 10;
     workoutForm.setWorkoutReps(parsedReps);
+
+    const baseWeight = getLastWeightForExercise(name);
+    workoutForm.setWorkoutWeight(baseWeight);
+    setLoadedExerciseRestSec(restSec || 90);
+
+    // Populate individual set rows so each set can have its own varying weight
+    const newRows: SetDetail[] = Array.from({ length: numSets }, (_, i) => ({
+      id: `set-${Date.now()}-${i}`,
+      setNumber: i + 1,
+      weight: baseWeight,
+      reps: parsedReps,
+      completed: i < (loggedSets || 0),
+    }));
+
+    setSetRows(newRows);
+    setStrengthEntryMode("perSet");
+    setActiveSetIndex(Math.min(numSets - 1, loggedSets || 0));
+  };
+
+  // Set row update handlers
+  const updateSetWeight = (idx: number, weight: number) => {
+    const safeW = Math.max(0, weight);
+    setSetRows((prev) =>
+      prev.map((r, i) => (i === idx ? { ...r, weight: safeW } : r)),
+    );
+    if (idx === activeSetIndex) {
+      workoutForm.setWorkoutWeight(safeW);
+    }
+  };
+
+  const adjustSetWeight = (idx: number, delta: number) => {
+    setSetRows((prev) =>
+      prev.map((r, i) => {
+        if (i !== idx) return r;
+        const newWeight = Math.max(0, (r.weight || 0) + delta);
+        if (i === activeSetIndex) workoutForm.setWorkoutWeight(newWeight);
+        return { ...r, weight: newWeight };
+      }),
+    );
+  };
+
+  const updateSetReps = (idx: number, reps: number) => {
+    const safeR = Math.max(1, reps);
+    setSetRows((prev) =>
+      prev.map((r, i) => (i === idx ? { ...r, reps: safeR } : r)),
+    );
+  };
+
+  const adjustSetReps = (idx: number, delta: number) => {
+    setSetRows((prev) =>
+      prev.map((r, i) =>
+        i === idx ? { ...r, reps: Math.max(1, (r.reps || 1) + delta) } : r,
+      ),
+    );
+  };
+
+  const applyWeightToSubsequentSets = (fromIdx: number) => {
+    const sourceWeight = setRows[fromIdx]?.weight ?? 40;
+    setSetRows((prev) =>
+      prev.map((r, i) =>
+        i >= fromIdx && !r.completed ? { ...r, weight: sourceWeight } : r,
+      ),
+    );
+  };
+
+  const handleAddSet = () => {
+    const lastRow = setRows[setRows.length - 1];
+    const newRow: SetDetail = {
+      id: `set-${Date.now()}-${setRows.length}`,
+      setNumber: setRows.length + 1,
+      weight: lastRow ? lastRow.weight : Number(workoutForm.workoutWeight) || 40,
+      reps: lastRow ? lastRow.reps : Number(workoutForm.workoutReps) || 10,
+      completed: false,
+    };
+    const nextRows = [...setRows, newRow];
+    setSetRows(nextRows);
+    workoutForm.setWorkoutSets(nextRows.length);
+    setActiveSetIndex(nextRows.length - 1);
+  };
+
+  const handleRemoveSet = (idx: number) => {
+    if (setRows.length <= 1) return;
+    const nextRows = setRows
+      .filter((_, i) => i !== idx)
+      .map((r, i) => ({ ...r, setNumber: i + 1 }));
+    setSetRows(nextRows);
+    workoutForm.setWorkoutSets(nextRows.length);
+    setActiveSetIndex((prev) => Math.min(prev, nextRows.length - 1));
+  };
+
+  // Log single set immediately
+  const logSingleSet = (idx: number) => {
+    const row = setRows[idx];
+    if (!row || row.completed) return;
+
+    const exerciseToRecord =
+      workoutForm.workoutExercise === "Custom"
+        ? workoutForm.customWorkoutExercise.trim().replace(/\s+/g, " ")
+        : workoutForm.workoutExercise;
+    if (!exerciseToRecord || !workoutForm.workoutDate) return;
+
+    const totalSets = setRows.length;
+    const setNoteTag = `Set ${row.setNumber}/${totalSets}`;
+    const finalNote = workoutForm.workoutNote.trim()
+      ? `${workoutForm.workoutNote.trim()} [${setNoteTag}]`
+      : `[${setNoteTag}]`;
+
+    if (addWorkoutEntries) {
+      addWorkoutEntries(
+        [
+          {
+            exercise: exerciseToRecord,
+            sets: 1,
+            reps: Number(row.reps) || 1,
+            weight: Number(row.weight) || 0,
+            note: finalNote,
+            intensity: workoutForm.workoutIntensity,
+            kind: "strength",
+          },
+        ],
+        workoutForm.workoutDate,
+      );
+    }
+
+    setSetRows((prev) =>
+      prev.map((r, i) => (i === idx ? { ...r, completed: true } : r)),
+    );
+
+    if (routine.activeRoutine && exerciseToRecord) {
+      routine.markQueueExerciseProgress(exerciseToRecord, 1);
+    } else {
+      routine.startRestTimer(loadedExerciseRestSec || 90);
+    }
+
+    const nextPending = setRows.findIndex((r, i) => i > idx && !r.completed);
+    if (nextPending !== -1) {
+      setActiveSetIndex(nextPending);
+    }
+  };
+
+  // Log all pending sets with their individual varying weights
+  const logAllPendingSets = () => {
+    const pendingRows = setRows.filter((r) => !r.completed);
+    if (!pendingRows.length) return;
+
+    const exerciseToRecord =
+      workoutForm.workoutExercise === "Custom"
+        ? workoutForm.customWorkoutExercise.trim().replace(/\s+/g, " ")
+        : workoutForm.workoutExercise;
+    if (!exerciseToRecord || !workoutForm.workoutDate) return;
+
+    const totalSets = setRows.length;
+    const entriesToLog: BatchWorkoutEntryInput[] = pendingRows.map((r) => {
+      const setNoteTag = `Set ${r.setNumber}/${totalSets}`;
+      const finalNote = workoutForm.workoutNote.trim()
+        ? `${workoutForm.workoutNote.trim()} [${setNoteTag}]`
+        : `[${setNoteTag}]`;
+      return {
+        exercise: exerciseToRecord,
+        sets: 1,
+        reps: Number(r.reps) || 1,
+        weight: Number(r.weight) || 0,
+        note: finalNote,
+        intensity: workoutForm.workoutIntensity,
+        kind: "strength",
+      };
+    });
+
+    if (addWorkoutEntries) {
+      addWorkoutEntries(entriesToLog, workoutForm.workoutDate);
+    }
+
+    setSetRows((prev) => prev.map((r) => ({ ...r, completed: true })));
+
+    if (routine.activeRoutine && exerciseToRecord) {
+      routine.markQueueExerciseProgress(exerciseToRecord, pendingRows.length);
+    } else {
+      routine.startRestTimer(loadedExerciseRestSec || 90);
+    }
   };
 
   const handleFormSubmit = (e: FormEvent) => {
     e.preventDefault();
     const exerciseToRecord =
       workoutForm.workoutExercise === "Custom"
-        ? workoutForm.customWorkoutExercise
+        ? workoutForm.customWorkoutExercise.trim().replace(/\s+/g, " ")
         : workoutForm.workoutExercise;
+    if (!exerciseToRecord) return;
 
-    addWorkout(e);
-
-    // If active routine has this exercise, mark progress in the queue and engage rest timer!
-    if (routine.activeRoutine && exerciseToRecord) {
-      routine.markQueueExerciseProgress(exerciseToRecord);
+    if (isStrength && strengthEntryMode === "perSet") {
+      logAllPendingSets();
+    } else {
+      addWorkout(e);
+      if (routine.activeRoutine && exerciseToRecord) {
+        routine.markQueueExerciseProgress(exerciseToRecord, Number(workoutForm.workoutSets) || 1);
+      }
     }
   };
+
+  // Calculations for varying loads
+  const completedSetCount = setRows.filter((r) => r.completed).length;
+  const pendingRows = setRows.filter((r) => !r.completed);
+  const pendingSetCount = pendingRows.length;
+  const perSetEstimatedVolume = setRows.reduce(
+    (acc, r) => acc + (Number(r.weight) || 0) * (Number(r.reps) || 0),
+    0,
+  );
+  const pendingVolume = pendingRows.reduce(
+    (acc, r) => acc + (Number(r.weight) || 0) * (Number(r.reps) || 0),
+    0,
+  );
+  const maxSetWeight = Math.max(0, ...setRows.map((r) => Number(r.weight) || 0));
 
   return (
     <section className="workout-section">
@@ -155,30 +421,130 @@ export function WorkoutSection({
         </div>
       </div>
 
-      {/* Routine Builder Drawer / Module */}
-      {showBuilder ? (
-        <WorkoutRoutineBuilder
-          programs={routine.programs}
-          selectedProgramId={routine.selectedProgramId}
-          setSelectedProgramId={routine.setSelectedProgramId}
-          selectedDayNumber={routine.selectedDayNumber}
-          setSelectedDayNumber={routine.setSelectedDayNumber}
-          currentProgram={routine.currentProgram}
-          currentDay={routine.currentDay}
-          trainingDays={routine.trainingDays}
-          customExercises={routine.customExercises}
-          allAvailableExercises={routine.allAvailableExercises}
-          updateExerciseSets={routine.updateExerciseSets}
-          updateExerciseReps={routine.updateExerciseReps}
-          removeExercise={routine.removeExercise}
-          addExerciseToRoutine={routine.addExerciseToRoutine}
-          onEngageRoutine={() => {
-            routine.engageRoutine();
-            setShowBuilder(false);
+      {/* Phase 4 Sub-Navigation */}
+      <div
+        style={{
+          display: "flex",
+          gap: "8px",
+          marginBottom: "20px",
+          padding: "6px",
+          borderRadius: "8px",
+          background: "var(--panel-recessed)",
+          border: "1px solid var(--milled-border)",
+          width: "fit-content",
+        }}
+      >
+        <button
+          type="button"
+          onClick={() => setWorkoutSubTab("live")}
+          className={`btn ${workoutSubTab === "live" ? "btn-primary" : "btn-secondary"}`}
+          style={{ minHeight: "34px", fontSize: "0.76rem", padding: "0 14px" }}
+        >
+          ⚡ Live Workout Stage
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            setWorkoutSubTab("records");
+            loadPrs();
           }}
-          hasActiveRoutine={Boolean(routine.activeRoutine)}
-        />
-      ) : null}
+          className={`btn ${workoutSubTab === "records" ? "btn-primary" : "btn-secondary"}`}
+          style={{ minHeight: "34px", fontSize: "0.76rem", padding: "0 14px" }}
+        >
+          🏆 PRs & Overload Engine
+        </button>
+        <button
+          type="button"
+          onClick={() => setWorkoutSubTab("ledger")}
+          className={`btn ${workoutSubTab === "ledger" ? "btn-primary" : "btn-secondary"}`}
+          style={{ minHeight: "34px", fontSize: "0.76rem", padding: "0 14px" }}
+        >
+          📋 Manual History Ledger
+        </button>
+      </div>
+
+      {workoutSubTab === "live" && (
+        <div style={{ marginBottom: "28px" }}>
+          <LiveWorkoutStage
+            onWorkoutCompleted={() => {
+              loadPrs();
+            }}
+            onOpenHistory={(ex) => setActiveHistoryExercise(ex)}
+          />
+        </div>
+      )}
+
+      {workoutSubTab === "records" && (
+        <div style={{ marginBottom: "28px" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
+            <div>
+              <p className="eyebrow" style={{ color: "var(--amber-gold, #f59e0b)" }}>
+                PROGRESSIVE OVERLOAD RECORDS
+              </p>
+              <h3>Personal Records & Estimated 1RM</h3>
+            </div>
+            <button
+              type="button"
+              className="btn btn-secondary"
+              onClick={loadPrs}
+              style={{ minHeight: "30px", fontSize: "0.72rem" }}
+            >
+              ↻ Refresh PRs
+            </button>
+          </div>
+          {prs.length === 0 ? (
+            <div
+              className="glass-panel"
+              style={{ padding: "32px", textAlign: "center", color: "var(--ink-secondary)" }}
+            >
+              No personal records logged yet. Check off sets in Live Workout Stage to record PRs.
+            </div>
+          ) : (
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))",
+                gap: "16px",
+              }}
+            >
+              {prs.map((pr) => (
+                <ExerciseProgressionCard
+                  key={pr.exercise_name}
+                  pr={pr}
+                  onOpenHistory={(ex) => setActiveHistoryExercise(ex)}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {workoutSubTab === "ledger" && (
+        <>
+          {/* Routine Builder Drawer / Module */}
+          {showBuilder ? (
+            <WorkoutRoutineBuilder
+              programs={routine.programs}
+              selectedProgramId={routine.selectedProgramId}
+              setSelectedProgramId={routine.setSelectedProgramId}
+              selectedDayNumber={routine.selectedDayNumber}
+              setSelectedDayNumber={routine.setSelectedDayNumber}
+              currentProgram={routine.currentProgram}
+              currentDay={routine.currentDay}
+              trainingDays={routine.trainingDays}
+              customExercises={routine.customExercises}
+              allAvailableExercises={routine.allAvailableExercises}
+              updateExerciseSets={routine.updateExerciseSets}
+              updateExerciseReps={routine.updateExerciseReps}
+              removeExercise={routine.removeExercise}
+              addExerciseToRoutine={routine.addExerciseToRoutine}
+              onEngageRoutine={() => {
+                routine.engageRoutine();
+                setShowBuilder(false);
+              }}
+              hasActiveRoutine={Boolean(routine.activeRoutine)}
+            />
+          ) : null}
 
       {/* Active Routine Session Queue & Live Guidance */}
       {routine.activeRoutine ? (
@@ -649,7 +1015,7 @@ export function WorkoutSection({
                   <button
                     type="button"
                     className="btn btn-secondary"
-                    onClick={() => loadExerciseFromQueue(item.name, item.sets, item.reps)}
+                    onClick={() => loadExerciseFromQueue(item.name, item.sets, item.reps, item.loggedSets, item.rest_sec)}
                     style={{
                       minHeight: "30px",
                       fontSize: "0.72rem",
@@ -767,95 +1133,335 @@ export function WorkoutSection({
             ) : null}
 
             {isStrength ? (
-              <>
-                <label className="workout-field-label">
-                  <span>Sets</span>
-                  <div style={{ display: "flex", gap: "4px" }}>
-                    <input
-                      type="number"
-                      min="1"
-                      value={workoutForm.workoutSets}
-                      onChange={(event) =>
-                        workoutForm.setWorkoutSets(event.target.value)
-                      }
-                      style={{ width: "100%" }}
-                      required
-                    />
+              <div className="set-matrix-wrapper">
+                <div className="set-matrix-toolbar">
+                  <div className="set-matrix-title-group">
+                    <span className="set-matrix-badge">
+                      {strengthEntryMode === "perSet" ? "⚡ VARYING LOAD MATRIX" : "⊞ UNIFORM BATCH"}
+                    </span>
+                    <span className="set-matrix-meta">
+                      Target: <strong>{setRows.length} Sets</strong>
+                      {strengthEntryMode === "perSet" && (
+                        <>
+                          {" · "}Done: <strong>{completedSetCount}/{setRows.length}</strong>
+                          {" · "}Vol: <strong>{formatLoad(perSetEstimatedVolume)}</strong>
+                        </>
+                      )}
+                    </span>
                   </div>
-                </label>
-                <label className="workout-field-label">
-                  <span>Reps</span>
-                  <div style={{ display: "flex", gap: "4px" }}>
-                    <input
-                      type="number"
-                      min="1"
-                      value={workoutForm.workoutReps}
-                      onChange={(event) =>
-                        workoutForm.setWorkoutReps(event.target.value)
-                      }
-                      style={{ width: "100%" }}
-                      required
-                    />
-                  </div>
-                </label>
-                <label className="workout-field-label">
-                  <span>Load (Kg)</span>
-                  <div style={{ display: "flex", gap: "4px" }}>
-                    <input
-                      type="number"
-                      min="0"
-                      step="0.5"
-                      value={workoutForm.workoutWeight}
-                      onChange={(event) =>
-                        workoutForm.setWorkoutWeight(event.target.value)
-                      }
-                      style={{ width: "100%" }}
-                      required
-                    />
-                  </div>
-                </label>
-                <div
-                  style={{
-                    gridColumn: "1 / -1",
-                    display: "flex",
-                    gap: "6px",
-                    flexWrap: "wrap",
-                  }}
-                >
-                  <span
-                    style={{
-                      fontSize: "0.7rem",
-                      fontFamily: "var(--font-mono)",
-                      color: "var(--ink-secondary)",
-                      alignSelf: "center",
-                    }}
-                  >
-                    Quick Load:
-                  </span>
-                  {[-10, -5, +2.5, +5, +10].map((delta) => (
+
+                  <div className="mode-tag-group">
                     <button
-                      key={delta}
                       type="button"
-                      onClick={() => workoutForm.adjustWeight(delta)}
+                      onClick={() => {
+                        setStrengthEntryMode("perSet");
+                        if (setRows.length !== Number(workoutForm.workoutSets)) {
+                          const numSets = Math.max(1, Number(workoutForm.workoutSets) || 3);
+                          const baseW = Number(workoutForm.workoutWeight) || 40;
+                          const baseR = Number(workoutForm.workoutReps) || 10;
+                          setSetRows(
+                            Array.from({ length: numSets }, (_, i) => ({
+                              id: `set-${Date.now()}-${i}`,
+                              setNumber: i + 1,
+                              weight: baseW,
+                              reps: baseR,
+                              completed: false,
+                            })),
+                          );
+                        }
+                      }}
+                      className={`mode-tag ${strengthEntryMode === "perSet" ? "is-active" : ""}`}
+                      title="Each set can have varying weights and reps"
+                    >
+                      ⚡ Varying Loads
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setStrengthEntryMode("uniform")}
+                      className={`mode-tag ${strengthEntryMode === "uniform" ? "is-active" : ""}`}
+                      title="Single weight applied to all sets"
+                    >
+                      ⊞ Uniform Sets
+                    </button>
+                  </div>
+                </div>
+
+                {strengthEntryMode === "perSet" ? (
+                  <>
+                    <div className="set-matrix-table">
+                      {setRows.map((row, idx) => {
+                        const isActive = idx === activeSetIndex && !row.completed;
+                        const setVol = (Number(row.weight) || 0) * (Number(row.reps) || 0);
+
+                        return (
+                          <div
+                            key={row.id}
+                            className={`set-matrix-row ${isActive ? "is-active" : ""} ${row.completed ? "is-completed" : ""}`}
+                            onClick={() => !row.completed && setActiveSetIndex(idx)}
+                          >
+                            <div className="set-matrix-row-num">
+                              <span>{isActive ? "▶" : row.completed ? "✓" : "•"}</span>
+                              <span>SET 0{row.setNumber}</span>
+                            </div>
+
+                            <div className="set-row-input-group">
+                              <span className="set-row-label">Load (kg)</span>
+                              <div className="set-row-input-box">
+                                <input
+                                  type="number"
+                                  min="0"
+                                  step="0.5"
+                                  value={row.weight}
+                                  disabled={row.completed}
+                                  onChange={(e) => updateSetWeight(idx, Number(e.target.value))}
+                                  style={{ color: "var(--volt-lime)" }}
+                                  aria-label={`Set ${row.setNumber} weight in kg`}
+                                />
+                              </div>
+                              {!row.completed && (
+                                <div className="set-matrix-steppers">
+                                  {[-5, -2.5, +2.5, +5].map((delta) => (
+                                    <button
+                                      key={delta}
+                                      type="button"
+                                      className={`set-stepper-btn ${delta > 0 ? "is-plus" : "is-minus"}`}
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        adjustSetWeight(idx, delta);
+                                      }}
+                                    >
+                                      {delta > 0 ? `+${delta}` : delta}
+                                    </button>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+
+                            <div className="set-row-input-group">
+                              <span className="set-row-label">Reps</span>
+                              <div className="set-row-input-box">
+                                <input
+                                  type="number"
+                                  min="1"
+                                  step="1"
+                                  value={row.reps}
+                                  disabled={row.completed}
+                                  onChange={(e) => updateSetReps(idx, Number(e.target.value))}
+                                  aria-label={`Set ${row.setNumber} reps`}
+                                />
+                              </div>
+                              {!row.completed && (
+                                <div className="set-matrix-steppers">
+                                  {[-1, +1, +2].map((delta) => (
+                                    <button
+                                      key={delta}
+                                      type="button"
+                                      className={`set-stepper-btn ${delta > 0 ? "is-plus" : "is-minus"}`}
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        adjustSetReps(idx, delta);
+                                      }}
+                                    >
+                                      {delta > 0 ? `+${delta}` : delta}
+                                    </button>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+
+                            <div className="set-row-vol-chip" title="Volume = load × reps">
+                              {formatLoad(setVol)}
+                            </div>
+
+                            <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
+                              {row.completed ? (
+                                <span className="set-row-done-badge" title="Set logged and telemetry recorded">
+                                  ✓ Logged
+                                </span>
+                              ) : (
+                                <button
+                                  type="button"
+                                  className="btn btn-secondary set-row-status-btn"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    logSingleSet(idx);
+                                  }}
+                                  title={`Log Set ${row.setNumber} (${row.weight}kg × ${row.reps}) & trigger rest timer`}
+                                >
+                                  ⚡ Log Set {row.setNumber}
+                                </button>
+                              )}
+
+                              {!row.completed && setRows.length > 1 && (
+                                <button
+                                  type="button"
+                                  className="icon-button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleRemoveSet(idx);
+                                  }}
+                                  title={`Remove Set ${row.setNumber}`}
+                                  style={{ width: "24px", height: "24px", opacity: 0.7 }}
+                                >
+                                  ✕
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    <div className="set-matrix-footer">
+                      <div style={{ display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" }}>
+                        <button
+                          type="button"
+                          className="btn btn-secondary"
+                          onClick={handleAddSet}
+                          style={{ minHeight: "30px", fontSize: "0.72rem", padding: "0 10px" }}
+                        >
+                          + Add Set {setRows.length + 1}
+                        </button>
+
+                        {setRows.length > 1 && activeSetIndex < setRows.length - 1 && (
+                          <button
+                            type="button"
+                            onClick={() => applyWeightToSubsequentSets(activeSetIndex)}
+                            style={{
+                              background: "transparent",
+                              border: "none",
+                              color: "var(--hazard-orange)",
+                              fontSize: "0.7rem",
+                              fontFamily: "var(--font-mono)",
+                              cursor: "pointer",
+                              textDecoration: "underline",
+                            }}
+                          >
+                            ↳ Copy Set {activeSetIndex + 1} load ({setRows[activeSetIndex]?.weight || 40}kg) to following sets
+                          </button>
+                        )}
+                      </div>
+
+                      <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
+                        <span style={{ fontSize: "0.68rem", fontFamily: "var(--font-mono)", color: "var(--ink-secondary)" }}>
+                          Active Load:
+                        </span>
+                        {[-10, -5, +2.5, +5, +10].map((delta) => (
+                          <button
+                            key={delta}
+                            type="button"
+                            className={`set-stepper-btn ${delta > 0 ? "is-plus" : "is-minus"}`}
+                            onClick={() => adjustSetWeight(activeSetIndex, delta)}
+                            title={`Adjust active Set ${activeSetIndex + 1} by ${delta > 0 ? `+${delta}` : delta}kg`}
+                          >
+                            {delta > 0 ? `+${delta}` : delta}kg
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </>
+                ) : (
+                  /* Classic Uniform Load Mode */
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "10px" }}>
+                    <label className="workout-field-label">
+                      <span>Sets</span>
+                      <input
+                        type="number"
+                        min="1"
+                        value={workoutForm.workoutSets}
+                        onChange={(e) => {
+                          workoutForm.setWorkoutSets(e.target.value);
+                          const num = Math.max(1, Number(e.target.value) || 1);
+                          setSetRows((prev) =>
+                            Array.from({ length: num }, (_, i) => prev[i] || {
+                              id: `set-${Date.now()}-${i}`,
+                              setNumber: i + 1,
+                              weight: Number(workoutForm.workoutWeight) || 40,
+                              reps: Number(workoutForm.workoutReps) || 10,
+                              completed: false,
+                            }),
+                          );
+                        }}
+                        required
+                      />
+                    </label>
+                    <label className="workout-field-label">
+                      <span>Reps</span>
+                      <input
+                        type="number"
+                        min="1"
+                        value={workoutForm.workoutReps}
+                        onChange={(e) => workoutForm.setWorkoutReps(e.target.value)}
+                        required
+                      />
+                    </label>
+                    <label className="workout-field-label">
+                      <span>Load (Kg)</span>
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.5"
+                        value={workoutForm.workoutWeight}
+                        onChange={(e) => {
+                          workoutForm.setWorkoutWeight(e.target.value);
+                          setSetRows((prev) =>
+                            prev.map((r) => (!r.completed ? { ...r, weight: Number(e.target.value) || 0 } : r)),
+                          );
+                        }}
+                        required
+                      />
+                    </label>
+                    <div
                       style={{
-                        padding: "2px 8px",
-                        fontSize: "0.72rem",
-                        fontFamily: "var(--font-mono)",
-                        fontWeight: 700,
-                        borderRadius: "4px",
-                        background: "var(--panel-recessed)",
-                        border: "1px solid var(--milled-border)",
-                        color:
-                          delta > 0
-                            ? "var(--volt-lime)"
-                            : "var(--stamp-crimson)",
+                        gridColumn: "1 / -1",
+                        display: "flex",
+                        gap: "6px",
+                        flexWrap: "wrap",
+                        marginTop: "4px",
                       }}
                     >
-                      {delta > 0 ? `+${delta}` : delta}kg
-                    </button>
-                  ))}
-                </div>
-              </>
+                      <span
+                        style={{
+                          fontSize: "0.7rem",
+                          fontFamily: "var(--font-mono)",
+                          color: "var(--ink-secondary)",
+                          alignSelf: "center",
+                        }}
+                      >
+                        Quick Load:
+                      </span>
+                      {[-10, -5, +2.5, +5, +10].map((delta) => (
+                        <button
+                          key={delta}
+                          type="button"
+                          onClick={() => {
+                            workoutForm.adjustWeight(delta);
+                            setSetRows((prev) =>
+                              prev.map((r) =>
+                                !r.completed
+                                  ? { ...r, weight: Math.max(0, (r.weight || 0) + delta) }
+                                  : r,
+                              ),
+                            );
+                          }}
+                          style={{
+                            padding: "2px 8px",
+                            fontSize: "0.72rem",
+                            fontFamily: "var(--font-mono)",
+                            fontWeight: 700,
+                            borderRadius: "4px",
+                            background: "var(--panel-recessed)",
+                            border: "1px solid var(--milled-border)",
+                            color: delta > 0 ? "var(--volt-lime)" : "var(--stamp-crimson)",
+                          }}
+                        >
+                          {delta > 0 ? `+${delta}` : delta}kg
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
             ) : (
               <>
                 <label className="workout-field-label">
@@ -939,7 +1545,11 @@ export function WorkoutSection({
               placeholder="PR markers, mechanical adjustments, pain telemetry..."
             />
 
-            <button className="btn btn-violet" type="submit">
+            <button
+              className="btn btn-violet"
+              type="submit"
+              disabled={isStrength && strengthEntryMode === "perSet" && pendingSetCount === 0}
+            >
               <svg
                 width="14"
                 height="14"
@@ -950,10 +1560,15 @@ export function WorkoutSection({
               >
                 <polyline points="20 6 9 17 4 12" />
               </svg>
-              Record Training Entry{" "}
-              {isStrength && estimatedVolume > 0
-                ? `[Tonnage: ${formatLoad(estimatedVolume)} | Bar: ${workoutForm.workoutWeight}kg]`
-                : ""}
+              {isStrength && strengthEntryMode === "perSet"
+                ? pendingSetCount > 0
+                  ? `Record All Pending Sets [${pendingSetCount} Sets · Tonnage: ${formatLoad(pendingVolume)} · Top: ${maxSetWeight}kg]`
+                  : `✓ All ${setRows.length} Sets Recorded [Total: ${formatLoad(perSetEstimatedVolume)}]`
+                : `Record Training Entry ${
+                    isStrength && estimatedVolume > 0
+                      ? `[Tonnage: ${formatLoad(estimatedVolume)} | Bar: ${workoutForm.workoutWeight}kg]`
+                      : ""
+                  }`}
             </button>
           </div>
         </form>
@@ -1011,6 +1626,15 @@ export function WorkoutSection({
           </div>
         </aside>
       </div>
+        </>
+      )}
+
+      {activeHistoryExercise && (
+        <ExerciseHistoryModal
+          exerciseName={activeHistoryExercise}
+          onClose={() => setActiveHistoryExercise(null)}
+        />
+      )}
     </section>
   );
 }

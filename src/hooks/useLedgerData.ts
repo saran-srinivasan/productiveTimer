@@ -1,8 +1,14 @@
 import { useEffect, useRef, useState, Dispatch, SetStateAction } from "react";
-import { fetchLedger, syncLedger } from "../apiClient";
+import {
+  drainOfflineQueueApi,
+  fetchActiveSessionApi,
+  fetchLedger,
+  getPendingMutationCount,
+  syncLedger,
+} from "../apiClient";
 import { STORAGE_KEY } from "../constants";
 import { buildInitialLedger, canonicalizeData } from "../utils/ledger";
-import { LedgerData, SyncState } from "../types/ledger";
+import { ActiveTimer, LedgerData, SyncState } from "../types/ledger";
 import { useAuth } from "../context/AuthContext";
 import { buildSampleGuestLedger } from "../data/sampleGuestData";
 
@@ -42,6 +48,8 @@ export interface UseLedgerDataReturn {
   setData: Dispatch<SetStateAction<LedgerData>>;
   syncState: SyncState;
   setSyncState: Dispatch<SetStateAction<SyncState>>;
+  pendingCount: number;
+  syncNow: () => Promise<void>;
 }
 
 export const useLedgerData = (): UseLedgerDataReturn => {
@@ -50,8 +58,13 @@ export const useLedgerData = (): UseLedgerDataReturn => {
     role === "owner" ? getOwnerInitialState() : getGuestInitialState(),
   );
   const [syncState, setSyncState] = useState<SyncState>(
-    role === "owner" ? "Connecting" : "Guest Sandbox",
+    role === "owner"
+      ? !navigator.onLine
+        ? "Offline"
+        : "Connecting"
+      : "Guest Sandbox",
   );
+  const [pendingCount, setPendingCount] = useState<number>(() => getPendingMutationCount());
   const backendReady = useRef(false);
   const currentRoleRef = useRef(role);
 
@@ -102,11 +115,14 @@ export const useLedgerData = (): UseLedgerDataReturn => {
       setSyncState("Syncing");
 
       try {
-        const remote = await fetchLedger(token);
+        const [remote, activeRemote] = await Promise.all([
+          fetchLedger(token),
+          fetchActiveSessionApi(token),
+        ]);
 
         if (cancelled) return;
 
-        setData((current) => {
+        setData((current: LedgerData) => {
           const mergedSessions = [
             ...new Map(
               [...current.sessions, ...remote.sessions].map((session) => [
@@ -134,12 +150,33 @@ export const useLedgerData = (): UseLedgerDataReturn => {
             ).values(),
           ].sort(byNewest("createdAt"));
 
+          let active: ActiveTimer | null = current.active;
+          if (activeRemote) {
+            const startedMs = new Date(activeRemote.startedAt).getTime() || Date.now();
+            const lastResumedMs = activeRemote.lastResumedAt
+              ? new Date(activeRemote.lastResumedAt).getTime()
+              : startedMs;
+
+            active = {
+              taskId: activeRemote.taskId,
+              sessionId: activeRemote.id,
+              startedAt: activeRemote.isPaused ? Date.now() : lastResumedMs,
+              elapsedSeconds: activeRemote.accumulatedSeconds,
+              targetSeconds: activeRemote.targetSeconds,
+              paused: activeRemote.isPaused,
+              clientVersion: activeRemote.clientVersion,
+            };
+          } else {
+            active = null;
+          }
+
           return canonicalizeData({
             ...current,
             tasks: [...remote.tasks, ...current.tasks],
             sessions: mergedSessions,
             workouts: mergedWorkouts,
             completions: mergedCompletions,
+            active,
           });
         });
 
@@ -189,5 +226,53 @@ export const useLedgerData = (): UseLedgerDataReturn => {
     return () => window.clearTimeout(syncTimer);
   }, [data, role, token]);
 
-  return { data, setData, syncState, setSyncState };
+  const syncNow = async () => {
+    if (role !== "owner" || !token) return;
+    setSyncState("Syncing");
+    try {
+      await drainOfflineQueueApi(token);
+      await syncLedger(
+        {
+          tasks: data.tasks,
+          sessions: data.sessions,
+          workouts: data.workouts,
+          completions: data.completions,
+        },
+        token,
+      );
+      setPendingCount(getPendingMutationCount());
+      setSyncState("Cloud synced");
+    } catch (err) {
+      console.error("Manual sync failed:", err);
+      setSyncState(!navigator.onLine ? "Offline" : "Cloud error");
+    }
+  };
+
+  useEffect(() => {
+    const handleOnline = () => {
+      setSyncState("Syncing");
+      drainOfflineQueueApi(token)
+        .then(() => {
+          setPendingCount(getPendingMutationCount());
+          setSyncState("Cloud synced");
+        })
+        .catch(() => {
+          setSyncState("Cloud error");
+        });
+    };
+
+    const handleOffline = () => {
+      setSyncState("Offline");
+    };
+
+    window.addEventListener("online", handleOnline);
+    window.addEventListener("offline", handleOffline);
+
+    return () => {
+      window.removeEventListener("online", handleOnline);
+      window.removeEventListener("offline", handleOffline);
+    };
+  }, [token]);
+
+  return { data, setData, syncState, setSyncState, pendingCount, syncNow };
 };

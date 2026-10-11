@@ -2593,3 +2593,277 @@ input[type="color"] {
   border-color: var(--ink-muted);
 }
 
+/* ==========================================================================
+   Varying Load Set Architecture Matrix (Gym & Training Pulse)
+   ========================================================================== */
+
+.set-matrix-wrapper {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  background: var(--panel-recessed);
+  border: 1px solid var(--milled-border);
+  border-radius: var(--radius-sm);
+  padding: 14px;
+}
+
+.set-matrix-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding-bottom: 10px;
+  border-bottom: 1px dashed var(--milled-border);
+}
+
+.set-matrix-title-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.set-matrix-badge {
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: var(--radius-xs);
+  background: rgba(255, 87, 34, 0.15);
+  color: var(--hazard-orange);
+  border: 1px solid rgba(255, 87, 34, 0.35);
+  letter-spacing: 0.04em;
+}
+
+.set-matrix-meta {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  color: var(--ink-secondary);
+}
+
+.set-matrix-meta strong {
+  color: var(--ink-pure);
+}
+
+.mode-tag-group {
+  display: flex;
+  gap: 4px;
+  background: var(--chassis-base);
+  padding: 2px;
+  border-radius: var(--radius-xs);
+  border: 1px solid var(--milled-border);
+}
+
+.mode-tag {
+  padding: 4px 10px;
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  font-weight: 700;
+  border-radius: var(--radius-xs);
+  background: transparent;
+  border: none;
+  color: var(--ink-secondary);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.mode-tag:hover {
+  color: var(--ink-pure);
+}
+
+.mode-tag.is-active {
+  background: var(--hazard-orange);
+  color: #fff;
+  font-weight: 800;
+  box-shadow: 0 0 10px var(--hazard-orange-glow);
+}
+
+.set-matrix-table {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.set-matrix-row {
+  display: grid;
+  grid-template-columns: 80px 1fr 1fr auto auto;
+  gap: 10px;
+  align-items: center;
+  padding: 10px 12px;
+  background: var(--panel-module);
+  border: 1px solid var(--milled-border);
+  border-radius: var(--radius-xs);
+  transition: border-color 0.15s ease, background-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.set-matrix-row.is-active {
+  border-color: var(--hazard-orange);
+  background: linear-gradient(90deg, rgba(255, 87, 34, 0.08), var(--panel-module));
+  box-shadow: inset 2px 0 0 var(--hazard-orange);
+}
+
+.set-matrix-row.is-completed {
+  border-color: rgba(0, 230, 118, 0.35);
+  background: rgba(0, 230, 118, 0.04);
+  opacity: 0.9;
+}
+
+.set-matrix-row-num {
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--ink-secondary);
+}
+
+.set-matrix-row.is-active .set-matrix-row-num {
+  color: var(--hazard-orange);
+}
+
+.set-matrix-row.is-completed .set-matrix-row-num {
+  color: var(--signal-green);
+}
+
+.set-row-input-group {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.set-row-label {
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  color: var(--ink-secondary);
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.set-row-input-box {
+  display: flex;
+  align-items: center;
+  position: relative;
+}
+
+.set-row-input-box input {
+  width: 100%;
+  min-height: 32px;
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  font-weight: 700;
+  padding: 4px 8px;
+  background: var(--panel-recessed);
+  border: 1px solid var(--milled-border);
+  border-radius: 3px;
+  color: var(--ink-pure);
+}
+
+.set-row-input-box input:focus {
+  border-color: var(--volt-lime);
+  outline: none;
+}
+
+.set-matrix-steppers {
+  display: flex;
+  gap: 3px;
+  margin-top: 3px;
+  flex-wrap: wrap;
+}
+
+.set-stepper-btn {
+  padding: 2px 6px;
+  font-family: var(--font-mono);
+  font-size: 0.64rem;
+  font-weight: 700;
+  background: var(--panel-recessed);
+  border: 1px solid var(--milled-border);
+  border-radius: 3px;
+  color: var(--ink-secondary);
+  cursor: pointer;
+  transition: all 0.12s ease;
+}
+
+.set-stepper-btn:hover {
+  color: var(--ink-pure);
+  border-color: var(--ink-secondary);
+  background: var(--panel-elevated);
+}
+
+.set-stepper-btn.is-plus {
+  color: var(--volt-lime);
+}
+
+.set-stepper-btn.is-minus {
+  color: var(--stamp-crimson);
+}
+
+.set-row-vol-chip {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--hazard-orange);
+  background: rgba(255, 87, 34, 0.1);
+  padding: 4px 8px;
+  border-radius: 3px;
+  border: 1px solid rgba(255, 87, 34, 0.25);
+  white-space: nowrap;
+}
+
+.set-row-status-btn {
+  min-height: 32px;
+  padding: 0 12px;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  font-weight: 700;
+  border-radius: var(--radius-xs);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.set-row-done-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--signal-green);
+  background: rgba(0, 230, 118, 0.12);
+  border: 1px solid rgba(0, 230, 118, 0.35);
+  padding: 4px 10px;
+  border-radius: var(--radius-xs);
+  white-space: nowrap;
+}
+
+.set-matrix-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--milled-border);
+}
+
+@media (max-width: 768px) {
+  .set-matrix-row {
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+  .set-matrix-row-num {
+    grid-column: 1 / -1;
+  }
+  .set-row-vol-chip {
+    grid-column: 1 / 2;
+  }
+  .set-row-status-btn, .set-row-done-badge {
+    grid-column: 2 / 3;
+    justify-self: end;
+  }
+}
+
+

@@ -2,6 +2,8 @@ import React, { useState } from "react";
 import { formatClock } from "../utils/format";
 import { FocusTask } from "../types/ledger";
 
+import { ActionTaskDto } from "../types/api";
+
 interface TimerStageProps {
   activeElapsed?: number;
   activeIsPaused?: boolean;
@@ -10,7 +12,11 @@ interface TimerStageProps {
   onLogSession: () => void;
   onPause: () => void;
   onResume: () => void;
+  onCancel?: () => void;
   setNote: (val: string) => void;
+  actionTaskId?: string | null;
+  setActionTaskId?: (id: string | null) => void;
+  actionTasks?: ActionTaskDto[];
 }
 
 export function TimerStage({
@@ -21,7 +27,11 @@ export function TimerStage({
   onLogSession,
   onPause,
   onResume,
+  onCancel,
   setNote,
+  actionTaskId,
+  setActionTaskId,
+  actionTasks,
 }: TimerStageProps) {
   const [timerMode, setTimerMode] = useState<string>("countup");
   const hasActiveTask = Boolean(activeTask);
@@ -139,6 +149,46 @@ export function TimerStage({
             </div>
           </div>
 
+          {actionTasks && actionTasks.length > 0 && setActionTaskId && (
+            <div style={{ marginBottom: "0.75rem" }}>
+              <label
+                style={{
+                  display: "block",
+                  fontSize: "0.7rem",
+                  fontFamily: "var(--font-mono)",
+                  color: "var(--ink-secondary)",
+                  marginBottom: "0.25rem",
+                  textTransform: "uppercase",
+                }}
+              >
+                [DELIVERABLE.TASK] // Link Actionable Task (Optional)
+              </label>
+              <select
+                value={actionTaskId || ""}
+                onChange={(e) => setActionTaskId(e.target.value ? e.target.value : null)}
+                style={{
+                  width: "100%",
+                  background: "var(--panel-recessed)",
+                  border: "1px solid var(--milled-border)",
+                  color: "var(--ink-primary)",
+                  padding: "0.45rem 0.6rem",
+                  borderRadius: "var(--radius-xs)",
+                  fontFamily: "var(--font-mono)",
+                  fontSize: "0.8rem",
+                }}
+              >
+                <option value="">(No specific action task linked)</option>
+                {actionTasks
+                  .filter((t) => t.status !== "completed")
+                  .map((t) => (
+                    <option key={t.id} value={t.id}>
+                      [{t.priority.toUpperCase()}] {t.title}
+                    </option>
+                  ))}
+              </select>
+            </div>
+          )}
+
           <div className="timer-note-wrapper">
             <label className="timer-note-label" htmlFor="timer-session-note">
               [LOG.NOTE] // Session Deliverables
@@ -185,6 +235,23 @@ export function TimerStage({
             </svg>
             Resume
           </button>
+
+          {onCancel && (
+            <button
+              type="button"
+              className="btn btn-secondary"
+              onClick={onCancel}
+              disabled={!hasActiveTask}
+              title="Discard / cancel active timer"
+              style={{ color: "var(--stamp-crimson, #ff1744)" }}
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                <line x1="18" y1="6" x2="6" y2="18" />
+                <line x1="6" y1="6" x2="18" y2="18" />
+              </svg>
+              Discard
+            </button>
+          )}
 
           <button
             type="button"

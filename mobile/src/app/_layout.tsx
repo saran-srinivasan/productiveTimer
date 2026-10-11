@@ -2,13 +2,15 @@ import { Tabs } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { StatusBar } from "expo-status-bar";
 import { SafeAreaProvider } from "react-native-safe-area-context";
+import { AuthProvider } from "../context/AuthContext";
 import { LedgerProvider } from "../context/LedgerContext";
 
 export default function RootLayout() {
   return (
     <SafeAreaProvider>
-      <LedgerProvider>
-        <StatusBar style="dark" />
+      <AuthProvider>
+        <LedgerProvider>
+          <StatusBar style="dark" />
         <Tabs
         screenOptions={{
           headerShown: false,
@@ -70,6 +72,19 @@ export default function RootLayout() {
           }}
         />
         <Tabs.Screen
+          name="projects"
+          options={{
+            title: "Projects",
+            tabBarIcon: ({ color, focused }) => (
+              <Ionicons
+                name={focused ? "folder" : "folder-outline"}
+                size={24}
+                color={color}
+              />
+            ),
+          }}
+        />
+        <Tabs.Screen
           name="calendar"
           options={{
             title: "Calendar",
@@ -83,7 +98,8 @@ export default function RootLayout() {
           }}
         />
       </Tabs>
-      </LedgerProvider>
+        </LedgerProvider>
+      </AuthProvider>
     </SafeAreaProvider>
   );
 }

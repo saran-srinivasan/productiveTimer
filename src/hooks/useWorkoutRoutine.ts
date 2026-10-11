@@ -11,6 +11,8 @@ import { safeId } from "../utils/ledger";
 import { playTacticalSound } from "../utils/sound";
 
 const ROUTINE_STORAGE_KEY = "focus-ledger-active-routine";
+const REST_TARGET_KEY = "focus-ledger-rest-target-ms";
+const REST_TOTAL_KEY = "focus-ledger-rest-total-sec";
 
 export const getAllAvailableExercises = (): string[] => {
   const set = new Set<string>();
@@ -36,9 +38,38 @@ export const useWorkoutRoutine = (soundEnabled = true) => {
     }
   });
 
-  // Rest Timer State
-  const [restSecondsLeft, setRestSecondsLeft] = useState<number | null>(null);
-  const [restDurationTotal, setRestDurationTotal] = useState<number>(90);
+  // Resilient Rest Timer State (Epoch timestamp based)
+  const [restTargetMs, setRestTargetMs] = useState<number | null>(() => {
+    try {
+      const stored = localStorage.getItem(REST_TARGET_KEY);
+      if (stored) {
+        const parsed = Number(stored);
+        if (parsed > Date.now()) {
+          return parsed;
+        }
+        localStorage.removeItem(REST_TARGET_KEY);
+      }
+      return null;
+    } catch {
+      return null;
+    }
+  });
+
+  const [restDurationTotal, setRestDurationTotal] = useState<number>(() => {
+    try {
+      const stored = localStorage.getItem(REST_TOTAL_KEY);
+      return stored ? Number(stored) || 90 : 90;
+    } catch {
+      return 90;
+    }
+  });
+
+  const [restSecondsLeft, setRestSecondsLeft] = useState<number | null>(() => {
+    if (restTargetMs && restTargetMs > Date.now()) {
+      return Math.max(0, Math.ceil((restTargetMs - Date.now()) / 1000));
+    }
+    return null;
+  });
 
   const allAvailableExercises = useMemo(() => getAllAvailableExercises(), []);
 
@@ -55,20 +86,63 @@ export const useWorkoutRoutine = (soundEnabled = true) => {
     }
   }, [activeRoutine]);
 
-  // Rest Countdown Interval
+  // Sync rest timer target to localStorage
   useEffect(() => {
-    if (restSecondsLeft === null || restSecondsLeft <= 0) return;
-    const interval = setInterval(() => {
-      setRestSecondsLeft((prev) => {
-        if (prev === null || prev <= 1) {
-          playTacticalSound("countdown_end", soundEnabled);
-          return null;
+    try {
+      if (restTargetMs !== null) {
+        localStorage.setItem(REST_TARGET_KEY, restTargetMs.toString());
+        localStorage.setItem(REST_TOTAL_KEY, restDurationTotal.toString());
+      } else {
+        localStorage.removeItem(REST_TARGET_KEY);
+        localStorage.removeItem(REST_TOTAL_KEY);
+      }
+    } catch {
+      // ignore
+    }
+  }, [restTargetMs, restDurationTotal]);
+
+  // Resilient Rest Countdown Interval & Visibility Change Handler
+  useEffect(() => {
+    if (!restTargetMs) {
+      setRestSecondsLeft(null);
+      return;
+    }
+
+    const updateTimer = () => {
+      const now = Date.now();
+      const diffMs = restTargetMs - now;
+      if (diffMs <= 0) {
+        setRestSecondsLeft(null);
+        setRestTargetMs(null);
+        playTacticalSound("countdown_end", soundEnabled);
+        if (typeof navigator !== "undefined" && "vibrate" in navigator) {
+          try {
+            navigator.vibrate([200, 100, 200]);
+          } catch {
+            // ignore
+          }
         }
-        return prev - 1;
-      });
-    }, 1000);
-    return () => clearInterval(interval);
-  }, [restSecondsLeft, soundEnabled]);
+      } else {
+        setRestSecondsLeft(Math.ceil(diffMs / 1000));
+      }
+    };
+
+    updateTimer();
+    const interval = setInterval(updateTimer, 500);
+
+    const onVisibilityOrFocus = () => {
+      updateTimer();
+    };
+
+    window.addEventListener("focus", onVisibilityOrFocus);
+    document.addEventListener("visibilitychange", onVisibilityOrFocus);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener("focus", onVisibilityOrFocus);
+      document.removeEventListener("visibilitychange", onVisibilityOrFocus);
+    };
+  }, [restTargetMs, soundEnabled]);
 
   const currentProgram: WorkoutProgram =
     workoutProgramsData.find((p) => p.id === selectedProgramId) ||
@@ -225,14 +299,14 @@ export const useWorkoutRoutine = (soundEnabled = true) => {
   };
 
   // Mark an exercise set as completed in active queue
-  const markQueueExerciseProgress = (exerciseName: string) => {
+  const markQueueExerciseProgress = (exerciseName: string, setsToAdd = 1) => {
     if (!activeRoutine) return;
     setActiveRoutine((prev) => {
       if (!prev) return null;
       let matchedRestSec = 90;
       const updatedItems = prev.items.map((item) => {
         if (item.name.toLowerCase() === exerciseName.toLowerCase()) {
-          const nextLogged = item.loggedSets + 1;
+          const nextLogged = item.loggedSets + setsToAdd;
           matchedRestSec = item.rest_sec;
           return {
             ...item,
@@ -276,12 +350,30 @@ export const useWorkoutRoutine = (soundEnabled = true) => {
   };
 
   const startRestTimer = useCallback((seconds: number) => {
-    setRestDurationTotal(seconds);
-    setRestSecondsLeft(seconds);
+    const total = Math.max(5, seconds);
+    setRestDurationTotal(total);
+    setRestTargetMs(Date.now() + total * 1000);
+    setRestSecondsLeft(total);
   }, []);
 
   const stopRestTimer = useCallback(() => {
+    setRestTargetMs(null);
     setRestSecondsLeft(null);
+    try {
+      localStorage.removeItem(REST_TARGET_KEY);
+      localStorage.removeItem(REST_TOTAL_KEY);
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  const adjustRestTimer = useCallback((deltaSeconds: number) => {
+    setRestTargetMs((prev) => {
+      const base = prev && prev > Date.now() ? prev : Date.now();
+      const updated = Math.max(Date.now() + 5000, base + deltaSeconds * 1000);
+      setRestSecondsLeft(Math.max(1, Math.ceil((updated - Date.now()) / 1000)));
+      return updated;
+    });
   }, []);
 
   return {
@@ -311,5 +403,6 @@ export const useWorkoutRoutine = (soundEnabled = true) => {
     restDurationTotal,
     startRestTimer,
     stopRestTimer,
+    adjustRestTimer,
   };
 };

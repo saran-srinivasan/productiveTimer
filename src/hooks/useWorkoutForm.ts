@@ -4,12 +4,24 @@ import { deleteWorkoutApi } from "../apiClient";
 import { todayKey } from "../utils/date";
 import { safeId } from "../utils/ledger";
 import { playTacticalSound } from "../utils/sound";
-import { LedgerData, SyncState, WorkoutKind } from "../types/ledger";
+import { LedgerData, SyncState, WorkoutEntry, WorkoutKind } from "../types/ledger";
 
 interface UseWorkoutFormParams {
   setData: Dispatch<SetStateAction<LedgerData>>;
   setSyncState: Dispatch<SetStateAction<SyncState>>;
   soundEnabled?: boolean;
+}
+
+export interface BatchWorkoutEntryInput {
+  exercise: string;
+  sets: number;
+  reps: number;
+  weight: number;
+  note?: string;
+  intensity?: string;
+  kind?: WorkoutKind;
+  durationMinutes?: number | null;
+  distance?: number | null;
 }
 
 export const useWorkoutForm = ({
@@ -86,6 +98,35 @@ export const useWorkoutForm = ({
     }
   };
 
+  const addWorkoutEntries = (
+    entries: BatchWorkoutEntryInput[],
+    date = workoutDate,
+  ) => {
+    if (!entries.length || !date) return;
+    playTacticalSound("complete", soundEnabled);
+
+    const baseTime = Date.now();
+    const newItems: WorkoutEntry[] = entries.map((entry, idx) => ({
+      id: safeId(),
+      date,
+      kind: entry.kind || "strength",
+      exercise: entry.exercise,
+      sets: entry.kind === "cardio" ? null : entry.sets,
+      reps: entry.kind === "cardio" ? null : entry.reps,
+      weight: entry.kind === "cardio" ? null : Math.max(0, entry.weight || 0),
+      durationMinutes: entry.kind === "cardio" ? entry.durationMinutes ?? null : null,
+      distance: entry.kind === "cardio" ? entry.distance ?? null : null,
+      intensity: entry.intensity || workoutIntensity,
+      note: (entry.note ?? "").trim(),
+      createdAt: new Date(baseTime + idx).toISOString(),
+    }));
+
+    setData((current) => ({
+      ...current,
+      workouts: [...newItems, ...current.workouts],
+    }));
+  };
+
   const deleteWorkout = (workoutId: string) => {
     playTacticalSound("click", soundEnabled);
 
@@ -144,6 +185,7 @@ export const useWorkoutForm = ({
       adjustCardioMinutes,
     },
     addWorkout,
+    addWorkoutEntries,
     deleteWorkout,
   };
 };

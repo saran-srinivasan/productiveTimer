@@ -10,7 +10,7 @@
 .PHONY: help setup install install-mobile install-all \
 	dev backend dev-all preview \
 	mobile mobile-android mobile-ios mobile-web mobile-lint \
-	build backend-build backend-release build-all \
+	build backend-build backend-release build-all backup-db \
 	check test \
 	docker-build docker-up docker-down docker-logs docker-restart \
 	clean clean-all
@@ -119,15 +119,26 @@ backend-release:
 
 build-all: build backend-release
 
+backup-db:
+	@node -e "const fs = require('fs'); const src = 'data/productive_timer.db'; if (fs.existsSync(src)) { fs.mkdirSync('data/backups', { recursive: true }); const ts = new Date().toISOString().replace(/[:.]/g, '-'); const dest = 'data/backups/productive_timer_backup_' + ts + '.db'; fs.copyFileSync(src, dest); console.log('✓ Database backed up to ' + dest); } else { console.log('No existing database file found to backup.'); }"
+
+
 # ------------------------------------------------------------------------------
 # Quality & Testing
 # ------------------------------------------------------------------------------
 check:
-	npm run build
-	cargo check --manifest-path backend/Cargo.toml
+	npx tsc -b
+	cargo fmt --manifest-path backend/Cargo.toml -- --check
+	cargo clippy --manifest-path backend/Cargo.toml -- -D warnings
 
-test:
+test: test-backend test-frontend
+
+test-backend:
 	cargo test --manifest-path backend/Cargo.toml
+
+test-frontend:
+	npm test
+
 
 # ------------------------------------------------------------------------------
 # Docker Operations

@@ -1,6 +1,8 @@
 import * as Crypto from "expo-crypto";
 
 export const STORAGE_KEY = "focus-ledger-v1";
+export const API_BASE_URL =
+  process.env.EXPO_PUBLIC_API_URL || "http://localhost:3001/api";
 
 export const starterTasks = [
   { id: Crypto.randomUUID(), name: "Gym", targetMinutes: 45, color: "#d84b35" },

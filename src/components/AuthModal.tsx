@@ -33,8 +33,12 @@ export function AuthModal() {
     setError(null);
 
     if (authModalMode === "setup") {
-      if (password.length < 4) {
-        setError("Password must be at least 4 characters long.");
+      if (password.length < 12) {
+        setError("Password must be at least 12 characters long.");
+        return;
+      }
+      if (password.length > 128) {
+        setError("Password cannot exceed 128 characters.");
         return;
       }
       if (password !== confirmPassword) {
@@ -96,7 +100,7 @@ export function AuthModal() {
           </h2>
           <p className="auth-dialog-subtitle">
             {isSetupMode
-              ? "Configure master key to secure your cloud database. Visitors will use a local sandbox."
+              ? "Configure master key (minimum 12 characters) to secure your cloud database. Visitors will use a local sandbox."
               : "Verify your credentials to unlock cloud ledger synchronization and private records."}
           </p>
         </div>

@@ -1,15 +1,11 @@
 import { useEffect, useRef, useState } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import {
-  fromSessionRow,
-  fromTaskRow,
-  fromWorkoutRow,
-  isSupabaseConfigured,
-  supabase,
-  toSessionRow,
-  toTaskRow,
-  toWorkoutRow,
-} from "../supabaseClient";
+  drainOfflineQueueApi,
+  fetchActiveSessionApi,
+  fetchLedger,
+  syncLedger,
+} from "../apiClient";
 import { STORAGE_KEY } from "../constants";
 import { buildInitialLedger, canonicalizeData } from "../utils/ledger";
 
@@ -19,11 +15,8 @@ const byNewest = (dateKey) => (a, b) =>
 export const useLedgerData = () => {
   const [data, setData] = useState(buildInitialLedger);
   const [isLoading, setIsLoading] = useState(true);
-  const [syncState, setSyncState] = useState(
-    isSupabaseConfigured ? "Connecting" : "Local only",
-  );
+  const [syncState, setSyncState] = useState("Connecting");
   const cloudReady = useRef(false);
-  const workoutCloudReady = useRef(true);
 
   // Load from AsyncStorage on mount
   useEffect(() => {
@@ -58,49 +51,33 @@ export const useLedgerData = () => {
     saveLocalStorage();
   }, [data, isLoading]);
 
-  // Load from Supabase on mount
+  // Load from Rust backend on mount
   useEffect(() => {
-    if (!isSupabaseConfigured) return undefined;
-
     let cancelled = false;
 
     const loadCloudData = async () => {
       setSyncState("Syncing");
       try {
-        const [
-          { data: taskRows, error: tasksError },
-          { data: sessionRows, error: sessionsError },
-          { data: workoutRows, error: workoutsError },
-        ] = await Promise.all([
-          supabase
-            .from("focus_tasks")
-            .select("*")
-            .order("created_at", { ascending: true }),
-          supabase
-            .from("focus_sessions")
-            .select("*")
-            .order("ended_at", { ascending: false }),
-          supabase
-            .from("workout_entries")
-            .select("*")
-            .order("created_at", { ascending: false }),
+        const [ledgerResult, activeRemote] = await Promise.all([
+          fetchLedger().catch((err) => {
+            console.warn("fetchLedger failed:", err);
+            return null;
+          }),
+          fetchActiveSessionApi().catch(() => null),
         ]);
 
         if (cancelled) return;
 
-        if (tasksError || sessionsError) {
-          setSyncState("Cloud error");
+        if (!ledgerResult) {
+          setSyncState("Local only");
+          cloudReady.current = true;
           return;
         }
 
-        if (workoutsError) workoutCloudReady.current = false;
-
         setData((current) => {
-          const cloudTasks = (taskRows ?? []).map(fromTaskRow);
-          const cloudSessions = (sessionRows ?? []).map(fromSessionRow);
-          const cloudWorkouts = workoutsError
-            ? []
-            : (workoutRows ?? []).map(fromWorkoutRow);
+          const cloudTasks = ledgerResult.tasks ?? [];
+          const cloudSessions = ledgerResult.sessions ?? [];
+          const cloudWorkouts = ledgerResult.workouts ?? [];
 
           const mergedSessions = [
             ...new Map(
@@ -120,18 +97,37 @@ export const useLedgerData = () => {
             ).values(),
           ].sort(byNewest("createdAt"));
 
+          let active = current.active;
+          if (activeRemote) {
+            const startedMs = new Date(activeRemote.startedAt).getTime() || Date.now();
+            const lastResumedMs = activeRemote.lastResumedAt
+              ? new Date(activeRemote.lastResumedAt).getTime()
+              : startedMs;
+
+            active = {
+              taskId: activeRemote.taskId,
+              sessionId: activeRemote.id,
+              startedAt: activeRemote.isPaused ? Date.now() : lastResumedMs,
+              elapsedSeconds: activeRemote.accumulatedSeconds,
+              targetSeconds: activeRemote.targetSeconds,
+              paused: activeRemote.isPaused,
+              clientVersion: activeRemote.clientVersion,
+            };
+          }
+
           return canonicalizeData({
             ...current,
-            tasks: [...cloudTasks, ...current.tasks],
+            tasks: cloudTasks.length ? cloudTasks : current.tasks,
             sessions: mergedSessions,
             workouts: mergedWorkouts,
+            active,
           });
         });
 
         cloudReady.current = true;
-        setSyncState(workoutsError ? "Cloud error" : "Cloud synced");
+        setSyncState("Cloud synced");
       } catch (err) {
-        console.error("Cloud syncing error", err);
+        console.error("Backend sync error", err);
         if (!cancelled) setSyncState("Cloud error");
       }
     };
@@ -143,42 +139,21 @@ export const useLedgerData = () => {
     };
   }, []);
 
-  // Save to Supabase (debounce on local data change)
+  // Save to Rust backend (debounced on local data change)
   useEffect(() => {
-    if (!isSupabaseConfigured || !cloudReady.current || isLoading) return undefined;
+    if (!cloudReady.current || isLoading) return undefined;
 
     const syncTimer = setTimeout(async () => {
       setSyncState("Saving");
       try {
-        const [
-          { error: tasksError },
-          { error: sessionsError },
-          { error: workoutsError },
-        ] = await Promise.all([
-          data.tasks.length
-            ? supabase
-                .from("focus_tasks")
-                .upsert(data.tasks.map(toTaskRow), { onConflict: "id" })
-            : Promise.resolve({ error: null }),
-          data.sessions.length
-            ? supabase
-                .from("focus_sessions")
-                .upsert(data.sessions.map(toSessionRow), { onConflict: "id" })
-            : Promise.resolve({ error: null }),
-          workoutCloudReady.current && data.workouts.length
-            ? supabase
-                .from("workout_entries")
-                .upsert(data.workouts.map(toWorkoutRow), { onConflict: "id" })
-            : Promise.resolve({ error: null }),
-        ]);
-
-        setSyncState(
-          tasksError || sessionsError || workoutsError
-            ? "Cloud error"
-            : "Cloud synced",
-        );
+        await syncLedger({
+          tasks: data.tasks,
+          sessions: data.sessions,
+          workouts: data.workouts,
+        });
+        setSyncState("Cloud synced");
       } catch (err) {
-        console.error("Error upserting data to cloud", err);
+        console.error("Error syncing data to Rust backend", err);
         setSyncState("Cloud error");
       }
     }, 500);
@@ -186,5 +161,21 @@ export const useLedgerData = () => {
     return () => clearTimeout(syncTimer);
   }, [data, isLoading]);
 
-  return { data, setData, syncState, setSyncState, isLoading };
+  const syncNow = async () => {
+    setSyncState("Syncing");
+    try {
+      await drainOfflineQueueApi();
+      await syncLedger({
+        tasks: data.tasks,
+        sessions: data.sessions,
+        workouts: data.workouts,
+      });
+      setSyncState("Cloud synced");
+    } catch (err) {
+      console.error("Manual sync error", err);
+      setSyncState("Cloud error");
+    }
+  };
+
+  return { data, setData, syncState, setSyncState, syncNow, isLoading };
 };

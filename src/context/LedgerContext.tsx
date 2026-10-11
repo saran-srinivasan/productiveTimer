@@ -9,6 +9,7 @@ import React, {
   SetStateAction,
 } from "react";
 import { useLedgerData } from "../hooks/useLedgerData";
+import { useAuth } from "./AuthContext";
 import { useFocusStats, useWorkoutStats } from "../hooks/useStats";
 import { useTaskActions } from "../hooks/useTaskActions";
 import { useWorkoutForm } from "../hooks/useWorkoutForm";
@@ -32,6 +33,8 @@ interface LedgerContextValue {
   setData: Dispatch<SetStateAction<LedgerData>>;
   syncState: SyncState;
   setSyncState: Dispatch<SetStateAction<SyncState>>;
+  pendingCount: number;
+  syncNow: () => Promise<void>;
   soundEnabled: boolean;
   setSoundEnabled: Dispatch<SetStateAction<boolean>>;
   now: number;
@@ -65,7 +68,7 @@ interface LedgerContextValue {
 const LedgerContext = createContext<LedgerContextValue | null>(null);
 
 export function LedgerProvider({ children }: { children: ReactNode }) {
-  const { data, setData, syncState, setSyncState } = useLedgerData();
+  const { data, setData, syncState, setSyncState, pendingCount, syncNow } = useLedgerData();
   const [soundEnabled, setSoundEnabled] = useState<boolean>(() => {
     try {
       const stored = localStorage.getItem("focus-ledger-sound");
@@ -89,9 +92,10 @@ export function LedgerProvider({ children }: { children: ReactNode }) {
   const [completionDialogDate, setCompletionDialogDate] = useState<string | null>(null);
   const now = useNow();
 
+  const { token } = useAuth();
   const stats = useFocusStats(data.tasks, data.sessions);
   const workoutStats = useWorkoutStats(data.workouts);
-  const taskActions = useTaskActions({ setData, setSyncState, soundEnabled });
+  const taskActions = useTaskActions({ setData, setSyncState, soundEnabled, token });
   const workoutActions = useWorkoutForm({ setData, setSyncState, soundEnabled });
   const completionActions = useCompletionActions({ setData, setSyncState, soundEnabled });
   const manualSession = useManualSession({
@@ -205,6 +209,8 @@ export function LedgerProvider({ children }: { children: ReactNode }) {
     setData,
     syncState,
     setSyncState,
+    pendingCount,
+    syncNow,
     soundEnabled,
     setSoundEnabled,
     now,

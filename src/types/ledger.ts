@@ -12,7 +12,21 @@ export interface FocusSession {
   seconds: number;
   note?: string;
   date: string; // YYYY-MM-DD
+  actionTaskId?: string | null;
+  startedAt?: string;
   endedAt: string; // ISO string
+}
+
+export interface ActiveSession {
+  id: string;
+  taskId: string;
+  startedAt: string;
+  lastResumedAt?: string | null;
+  accumulatedSeconds: number;
+  targetSeconds?: number | null;
+  isPaused: boolean;
+  clientVersion: number;
+  updatedAt: string;
 }
 
 export type WorkoutKind = "strength" | "cardio";
@@ -45,6 +59,8 @@ export interface ActiveTimer {
   elapsedSeconds: number;
   targetSeconds?: number | null;
   paused: boolean;
+  sessionId?: string;
+  clientVersion?: number;
 }
 
 export interface LedgerData {
@@ -62,6 +78,7 @@ export type SyncState =
   | "Cloud synced"
   | "Cloud error"
   | "Local only"
+  | "Offline"
   | "Guest Sandbox";
 
 export interface FocusStats {
@@ -118,4 +135,35 @@ export interface CalendarMonthData {
   completionDays: number;
   manualCompletionDays: number;
   focusCompletionDays: number;
+}
+
+export interface Project {
+  id: string;
+  name: string;
+  description: string;
+  color: string;
+  status: "active" | "paused" | "completed" | "archived";
+  startDate?: string | null;
+  targetDate?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+  taskCount?: number;
+  totalFocusSeconds?: number;
+}
+
+export interface ActionTask {
+  id: string;
+  projectId?: string | null;
+  goalId?: string | null;
+  focusTaskId?: string | null;
+  title: string;
+  description: string;
+  status: "inbox" | "ready" | "in_progress" | "blocked" | "completed" | "archived";
+  priority: "low" | "medium" | "high" | "urgent";
+  estimateMinutes?: number | null;
+  dueAt?: string | null;
+  completedAt?: string | null;
+  completionNotes: string;
+  createdAt?: string;
+  updatedAt?: string;
 }

@@ -5,16 +5,34 @@ import { exportLedgerJSON } from "../utils/ledger";
 import { useLedgerContext } from "../context/LedgerContext";
 import { useAuth } from "../context/AuthContext";
 
-export function Header() {
+interface HeaderProps {
+  onOpenQuickCapture?: () => void;
+}
+
+export function Header({ onOpenQuickCapture }: HeaderProps = {}) {
   const {
     stats,
     workoutStats,
     syncState,
+    pendingCount,
+    syncNow,
     soundEnabled,
     setSoundEnabled,
     data,
     setData,
+    activeTask,
+    activeElapsed,
+    activeIsPaused,
+    taskActions,
   } = useLedgerContext();
+
+  const [selectedQuickTaskId, setSelectedQuickTaskId] = React.useState<string>("");
+
+  React.useEffect(() => {
+    if (!selectedQuickTaskId && data?.tasks?.length > 0) {
+      setSelectedQuickTaskId(data.tasks[0].id);
+    }
+  }, [data?.tasks, selectedQuickTaskId]);
 
   const {
     role,
@@ -114,6 +132,167 @@ export function Header() {
             <strong>{formatDuration(stats.todaySeconds)}</strong>
           </div>
 
+          {/* TASK-3.1.2: Instant 1-Click Timer Launcher & Active State Widget */}
+          {activeTask ? (
+            <div
+              className="header-timer-active"
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "8px",
+                padding: "4px 10px",
+                background: activeIsPaused ? "rgba(255, 171, 0, 0.12)" : "rgba(204, 255, 0, 0.12)",
+                border: `1px solid ${activeIsPaused ? "var(--phosphor-amber)" : "var(--volt-lime)"}`,
+                borderRadius: "var(--radius-sm)",
+                boxShadow: activeIsPaused ? "none" : "0 0 10px rgba(204, 255, 0, 0.2)",
+              }}
+            >
+              <span
+                className="pulse-dot"
+                style={{
+                  width: "8px",
+                  height: "8px",
+                  borderRadius: "50%",
+                  background: activeIsPaused ? "var(--phosphor-amber)" : "var(--volt-lime)",
+                  boxShadow: activeIsPaused ? "none" : "0 0 6px var(--volt-lime)",
+                  display: "inline-block",
+                }}
+              />
+              <span
+                style={{
+                  fontFamily: "var(--font-mono)",
+                  fontSize: "0.72rem",
+                  fontWeight: 700,
+                  color: activeTask.color || "var(--volt-lime)",
+                  maxWidth: "100px",
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                  whiteSpace: "nowrap",
+                }}
+                title={activeTask.name}
+              >
+                {activeTask.name}
+              </span>
+              <strong
+                style={{
+                  fontFamily: "var(--font-mono)",
+                  fontSize: "0.84rem",
+                  color: activeIsPaused ? "var(--phosphor-amber)" : "var(--ink-pure)",
+                }}
+              >
+                {formatDuration(activeElapsed)}
+              </strong>
+              <button
+                type="button"
+                onClick={activeIsPaused ? taskActions.resumeTimer : taskActions.pauseTimer}
+                title={activeIsPaused ? "Resume Timer" : "Pause Timer"}
+                style={{
+                  background: "none",
+                  border: "none",
+                  color: activeIsPaused ? "var(--volt-lime)" : "var(--phosphor-amber)",
+                  cursor: "pointer",
+                  padding: "0 2px",
+                  fontSize: "0.85rem",
+                }}
+              >
+                {activeIsPaused ? "▶" : "⏸"}
+              </button>
+              <button
+                type="button"
+                onClick={() => taskActions.logSession()}
+                title="Complete & Log Session"
+                style={{
+                  background: "var(--signal-green)",
+                  color: "#0a0d13",
+                  border: "none",
+                  borderRadius: "3px",
+                  fontWeight: 800,
+                  fontSize: "0.68rem",
+                  fontFamily: "var(--font-mono)",
+                  padding: "2px 6px",
+                  cursor: "pointer",
+                }}
+              >
+                ✓ LOG
+              </button>
+              <button
+                type="button"
+                onClick={taskActions.cancelTimer}
+                title="Cancel Session"
+                style={{
+                  background: "none",
+                  border: "none",
+                  color: "var(--stamp-crimson)",
+                  fontWeight: 800,
+                  fontSize: "0.75rem",
+                  cursor: "pointer",
+                  padding: "0 2px",
+                }}
+              >
+                ✕
+              </button>
+            </div>
+          ) : data?.tasks?.length > 0 ? (
+            <div
+              className="header-timer-launcher"
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "4px",
+                background: "var(--panel-recessed)",
+                border: "1px solid var(--milled-border)",
+                borderRadius: "var(--radius-sm)",
+                padding: "2px 6px",
+              }}
+            >
+              <select
+                value={selectedQuickTaskId || data.tasks[0]?.id || ""}
+                onChange={(e) => setSelectedQuickTaskId(e.target.value)}
+                aria-label="Quick focus lane selector"
+                style={{
+                  background: "transparent",
+                  color: "var(--ink-primary)",
+                  border: "none",
+                  fontSize: "0.72rem",
+                  fontFamily: "var(--font-mono)",
+                  maxWidth: "95px",
+                  cursor: "pointer",
+                }}
+              >
+                {data.tasks.map((t) => (
+                  <option key={t.id} value={t.id} style={{ background: "#151a22", color: "#e6edf3" }}>
+                    {t.name}
+                  </option>
+                ))}
+              </select>
+              <button
+                type="button"
+                id="header-instant-timer-btn"
+                onClick={() => {
+                  const targetId = selectedQuickTaskId || data.tasks[0]?.id;
+                  if (targetId) taskActions.startTask(targetId);
+                }}
+                title="1-Click Start Focus Timer"
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "4px",
+                  padding: "3px 8px",
+                  background: "var(--volt-lime)",
+                  color: "#0a0d13",
+                  fontWeight: "800",
+                  fontSize: "0.7rem",
+                  fontFamily: "var(--font-mono)",
+                  borderRadius: "3px",
+                  cursor: "pointer",
+                  boxShadow: "0 0 6px var(--volt-glow)",
+                }}
+              >
+                ▶ START
+              </button>
+            </div>
+          ) : null}
+
           {workoutStats.todayStrengthVolume > 0 ? (
             <div
               className="stat-pill gym-stat"
@@ -124,10 +303,66 @@ export function Header() {
             </div>
           ) : null}
 
-          <div className="sync-pill" data-state={syncState}>
+          <div
+            className="sync-pill"
+            data-state={syncState}
+            onClick={() => role === "owner" && syncNow()}
+            style={{ cursor: role === "owner" ? "pointer" : "default" }}
+            title={role === "owner" ? "Click to Sync Now" : undefined}
+          >
             <span className="sync-dot" />
-            <span>{syncState}</span>
+            <span>
+              {pendingCount > 0 && syncState !== "Syncing"
+                ? `Pending changes (${pendingCount})`
+                : syncState === "Cloud synced"
+                ? "Synced"
+                : syncState === "Saving"
+                ? "Syncing..."
+                : syncState}
+            </span>
           </div>
+
+          {role === "owner" && (
+            <button
+              type="button"
+              className="sync-now-button"
+              onClick={syncNow}
+              title="Manual Sync to Rust Backend"
+              style={{
+                fontSize: "11px",
+                fontWeight: "800",
+                padding: "4px 8px",
+                border: "2px solid #2f2a20",
+                background: "#f5f0e6",
+                cursor: "pointer",
+                borderRadius: "4px",
+              }}
+            >
+              🔄 Sync Now
+            </button>
+          )}
+
+          {onOpenQuickCapture && (
+            <button
+              type="button"
+              className="quick-add-button"
+              onClick={onOpenQuickCapture}
+              title="Global Quick-Capture Task (Ctrl+K)"
+              style={{
+                fontSize: "11px",
+                fontWeight: "800",
+                padding: "4px 8px",
+                border: "2px solid var(--volt-lime)",
+                background: "var(--panel-module)",
+                color: "var(--volt-lime)",
+                cursor: "pointer",
+                borderRadius: "4px",
+                fontFamily: "var(--font-mono)",
+              }}
+            >
+              ⚡ + TASK (Ctrl+K)
+            </button>
+          )}
 
           {/* Role Status Badge */}
           {role === "owner" ? (
@@ -265,6 +500,29 @@ export function Header() {
           [01] Command All
         </Link>
         <Link
+          to="/tasks"
+          className={`tab-button ${currentPath === "/tasks" ? "is-active" : ""}`}
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+            <polyline points="9 11 12 14 22 4" />
+            <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
+          </svg>
+          [02] Action Tasks
+        </Link>
+        <Link
+          to="/planner"
+          className={`tab-button ${currentPath === "/planner" ? "is-active" : ""}`}
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+            <rect x="3" y="4" width="18" height="18" rx="2" />
+            <line x1="3" y1="10" x2="21" y2="10" />
+            <line x1="8" y1="2" x2="8" y2="6" />
+            <line x1="16" y1="2" x2="16" y2="6" />
+            <polyline points="12 14 12 17 15 17" />
+          </svg>
+          [03] Day Planner
+        </Link>
+        <Link
           to="/focus"
           className={`tab-button ${currentPath === "/focus" ? "is-active" : ""}`}
         >
@@ -272,7 +530,7 @@ export function Header() {
             <circle cx="12" cy="12" r="9" />
             <polyline points="12 7 12 12 15 15" />
           </svg>
-          [02] Focus & Tasks
+          [04] Focus Lanes
         </Link>
         <Link
           to="/gym"
@@ -281,7 +539,7 @@ export function Header() {
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
             <path d="M6 5v14M18 5v14M2 9v6M22 9v6M6 12h12" />
           </svg>
-          [03] Gym Ledger
+          [05] Gym Ledger
         </Link>
         <Link
           to="/calendar"
@@ -293,7 +551,27 @@ export function Header() {
             <line x1="8" y1="2" x2="8" y2="6" />
             <line x1="3" y1="10" x2="21" y2="10" />
           </svg>
-          [04] Habit Matrix
+          [06] Habit Matrix
+        </Link>
+        <Link
+          to="/projects"
+          className={`tab-button ${currentPath === "/projects" ? "is-active" : ""}`}
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+            <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
+          </svg>
+          [07] Projects
+        </Link>
+        <Link
+          to="/goals"
+          className={`tab-button ${currentPath === "/goals" ? "is-active" : ""}`}
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+            <circle cx="12" cy="12" r="10" />
+            <circle cx="12" cy="12" r="6" />
+            <circle cx="12" cy="12" r="2" />
+          </svg>
+          [08] Goals
         </Link>
         <Link
           to="/telemetry"
@@ -304,7 +582,7 @@ export function Header() {
             <line x1="12" y1="20" x2="12" y2="4" />
             <line x1="6" y1="20" x2="6" y2="14" />
           </svg>
-          [05] Telemetry Logs
+          [09] Telemetry
         </Link>
       </nav>
     </header>
