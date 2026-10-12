@@ -24,8 +24,6 @@ RUN apt-get update && apt-get install -y pkg-config libssl-dev && rm -rf /var/li
 COPY --from=planner /app/backend/recipe.json ./backend/recipe.json
 
 # Build dependencies - cached by Docker until Cargo.toml or Cargo.lock change
-ARG CARGO_BUILD_JOBS
-ENV CARGO_BUILD_JOBS=${CARGO_BUILD_JOBS}
 RUN cd backend && cargo chef cook --release --recipe-path recipe.json
 
 # Copy full backend source code & migrations (embedded at compile time by sqlx::migrate!)
