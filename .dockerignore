@@ -1,0 +1,45 @@
+# Git
+.git
+.gitignore
+
+# Dependencies
+node_modules/
+mobile/node_modules/
+
+# Rust build artifacts
+backend/target/
+target/
+
+# Frontend build outputs
+dist/
+dist-ssr/
+
+# Local databases and backups
+data/
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+
+# Environment & logs
+.env
+.env.*
+!.env.example
+*.log
+npm-debug.log*
+
+# Mobile / Expo
+mobile/.expo/
+mobile/dist/
+
+# Tests & Coverage
+coverage/
+playwright-report/
+test-results/
+
+# Editor / Agent
+.idea/
+.vscode/
+*.swp
+*.swo
+.agents/

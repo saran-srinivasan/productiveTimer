@@ -1,3 +1,5 @@
+# syntax=docker/dockerfile:1
+
 # Stage 1: Build Frontend
 FROM node:20-alpine AS frontend-builder
 WORKDIR /app
@@ -7,17 +9,30 @@ COPY src/ ./src/
 COPY index.html ./
 RUN npm run build
 
-# Stage 2: Build Rust Backend
-FROM rust:1-slim-bookworm AS backend-builder
+# Stage 2: Prepare Cargo recipe with cargo-chef
+FROM lukemathwalker/cargo-chef:latest-rust-1-bookworm AS chef
+WORKDIR /app
+
+FROM chef AS planner
+COPY backend/ ./backend/
+RUN cd backend && cargo chef prepare --recipe-path recipe.json
+
+# Stage 3: Build Rust Backend
+FROM chef AS backend-builder
 WORKDIR /app
 RUN apt-get update && apt-get install -y pkg-config libssl-dev && rm -rf /var/lib/apt/lists/*
-COPY backend/Cargo.toml backend/Cargo.lock* ./backend/
-RUN mkdir -p backend/src && echo "fn main() {}" > backend/src/main.rs
-RUN cd backend && cargo build --release -j 1 || true
-COPY backend/src ./backend/src
-RUN touch backend/src/main.rs && cd backend && cargo build --release -j 1
+COPY --from=planner /app/backend/recipe.json ./backend/recipe.json
 
-# Stage 3: Runtime
+# Build dependencies - cached by Docker until Cargo.toml or Cargo.lock change
+ARG CARGO_BUILD_JOBS
+ENV CARGO_BUILD_JOBS=${CARGO_BUILD_JOBS}
+RUN cd backend && cargo chef cook --release --recipe-path recipe.json
+
+# Copy full backend source code & migrations (embedded at compile time by sqlx::migrate!)
+COPY backend/ ./backend/
+RUN cd backend && cargo build --release
+
+# Stage 4: Runtime
 FROM debian:bookworm-slim
 WORKDIR /app
 RUN apt-get update && apt-get install -y ca-certificates libssl3 && rm -rf /var/lib/apt/lists/*
